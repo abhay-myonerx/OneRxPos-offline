@@ -110,7 +110,7 @@ const DEFAULT_STOP_GRACE_MS = 5_000;
 // desktop app's cwd is `rx-pos-desktop` (true for `npm start` / `electron .`)
 // with `rx-pos-backend` as a sibling directory — handy for a quick harness.
 function defaultBackendDir(): string {
-  return path.resolve(process.cwd(), "..", "rx-pos-backend");
+  return path.resolve(process.cwd(), "..", "backend");
 }
 
 function getFreePort(): Promise<number> {

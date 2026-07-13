@@ -69,8 +69,8 @@ export function resolveStoreNodeResourcePaths(
   const root = opts.isPackaged ? opts.resourcesPath : opts.appPath;
 
   const backendDir = opts.isPackaged
-    ? path.join(root, "backend")
-    : path.resolve(root, "..", "rx-pos-backend");
+  ? path.join(root, "backend")
+  : path.resolve(root, "..", "backend");
   const nativeDir = path.join(root, "native", "node_modules");
 
   return {

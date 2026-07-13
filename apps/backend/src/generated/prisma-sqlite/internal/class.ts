@@ -23,7 +23,7 @@ const config: runtime.GetPrismaClientConfig = {
       "value": "prisma-client"
     },
     "output": {
-      "value": "E:\\RXPOS\\POS\\source code\\rx-pos-backend\\src\\generated\\prisma-sqlite",
+      "value": "D:\\Github\\OneRxPos-offline\\apps\\backend\\src\\generated\\prisma-sqlite",
       "fromEnvVar": null
     },
     "config": {
@@ -37,7 +37,7 @@ const config: runtime.GetPrismaClientConfig = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "E:\\RXPOS\\POS\\source code\\rx-pos-backend\\prisma\\schema.sqlite.prisma",
+    "sourceFilePath": "D:\\Github\\OneRxPos-offline\\apps\\backend\\prisma\\schema.sqlite.prisma",
     "isCustomOutput": true
   },
   "relativePath": "../../../prisma",
