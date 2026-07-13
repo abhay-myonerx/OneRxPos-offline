@@ -9,7 +9,7 @@
  "scripts": {
   "backend": "npm run dev --workspace=rx-pos-backend",
   "frontend": "npm run dev --workspace=rx-pos-frontend",
-  "desktop": "npm run dev --workspace=rx-pos-desktop",
+  "desktop": "npm run start --workspace=rx-pos-desktop",
   "shared": "npm run build --workspace=rx-pos-shared",
 
   "backend:build": "npm run build --workspace=rx-pos-backend",
