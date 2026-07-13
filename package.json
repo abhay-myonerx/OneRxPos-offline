@@ -1,7 +1,7 @@
 {
   "name": "onerx-pos",
   "private": true,
-  "packageManager": "pnpm@10",
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",

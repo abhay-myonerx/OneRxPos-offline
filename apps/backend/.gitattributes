@@ -1,0 +1,13 @@
+# Normalise line endings so files behave the same on every platform.
+# Default: let Git decide text vs binary and normalise to LF in the repo.
+* text=auto
+
+# Shell scripts MUST stay LF. They are exec'd inside Linux containers; a
+# CRLF entrypoint makes tini fail with:
+#   [FATAL tini (2)] exec ./docker-entrypoint.sh failed: No such file or directory
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Keep large binary artefacts from being line-ending normalised.
+*.sql binary
+*.dump binary

@@ -1,6 +1,0 @@
-node_modules/
-out/
-dist-desktop/
-playwright-report/
-test-results/
-.staging/

@@ -1,9 +1,0 @@
-{
-  "name": "rx-pos-desktop-native-electron-target",
-  "private": true,
-  "version": "0.0.0",
-  "description": "SN-4 WATCH-SN4-1 fix: a PRIVATE, standalone install of better-sqlite3-multiple-ciphers used only as a target for `npm run rebuild:native:backend` (see ../scripts/rebuild-native-backend.mjs). rx-pos-backend's OWN node_modules copy of this package must stay built for plain Node (so `npm test`/`npm run dev` in rx-pos-backend keep working) — this private copy is rebuilt for Electron's ABI instead, and the spawned store-node child is redirected to it at runtime via ../scripts/electron-native-require-hook.cjs. Not part of the desktop app's own require graph; installed/generated, not hand-edited.",
-  "dependencies": {
-    "better-sqlite3-multiple-ciphers": "^12.11.1"
-  }
-}

@@ -1,0 +1,9 @@
+{
+  "countryCode": "UAE",
+  "holidays": [
+    { "month": 1, "day": 1, "name": "New Year's Day", "type": "PUBLIC" },
+    { "month": 12, "day": 2, "name": "UAE National Day (Day 1)", "type": "PUBLIC" },
+    { "month": 12, "day": 3, "name": "UAE National Day (Day 2)", "type": "PUBLIC" },
+    { "month": 12, "day": 4, "name": "Commemoration Day", "type": "PUBLIC" }
+  ]
+}
