@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RX POS</title>
+
+    <!-- PWA-1: manifest + registration are injected automatically by
+         vite-plugin-pwa (see vite.config.ts). The tags below cover what the
+         plugin does NOT inject on its own: favicon + iOS "add to home
+         screen" support (apple-touch-icon, standalone-mode meta tags). -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <meta name="theme-color" content="#3b5bdb" />
+
+    <!-- iOS Safari does not support the Web App Manifest's display/theme_color,
+         so "add to home screen" needs these explicitly to launch standalone
+         with a themed status bar. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RX POS" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

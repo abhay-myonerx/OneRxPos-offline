@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "add": "Ajouter au panier",
+    "checkout": "Passer à la caisse"
+  },
+  "posAuth": {
+    "pinPad": {
+      "title": "Entrez votre code PIN",
+      "subtitle": "Code PIN à 6 chiffres",
+      "backspace": "Retour arrière",
+      "wrongPin": "Code PIN incorrect. Veuillez réessayer.",
+      "lockedOut": "Trop de tentatives. Ce code PIN est verrouillé — réessayez plus tard.",
+      "deviceNotEnrolled": "Cet appareil n'est pas enregistré. Demandez à un responsable de l'enregistrer avant de vous connecter.",
+      "genericError": "Impossible de se connecter. Veuillez réessayer."
+    },
+    "enroll": {
+      "title": "Enregistrer cet appareil",
+      "subtitle": "Choisissez le magasin auquel appartient ce poste",
+      "storeLabel": "Magasin",
+      "storePlaceholder": "Sélectionnez un magasin",
+      "nameLabel": "Nom de l'appareil (facultatif)",
+      "namePlaceholder": "ex. Comptoir principal 1",
+      "submit": "Enregistrer l'appareil",
+      "submitting": "Enregistrement…",
+      "success": "Appareil enregistré avec succès",
+      "error": "Échec de l'enregistrement de l'appareil"
+    },
+    "override": {
+      "title": "Dérogation du responsable",
+      "subtitle": "Entrez votre code PIN pour autoriser cette action",
+      "lockedOut": "Trop de tentatives. Ce code PIN est verrouillé — réessayez plus tard.",
+      "wrongPin": "Code PIN incorrect. Veuillez réessayer.",
+      "notAuthorized": "Cet utilisateur n'est pas autorisé pour cette action.",
+      "genericError": "Impossible d'autoriser cette dérogation. Veuillez réessayer."
+    },
+    "switchUser": {
+      "label": "Changer d'utilisateur"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "feedback": {
+    "noData": "No data",
+    "nothingYet": "Nothing to show here yet.",
+    "error": "Error",
+    "somethingWrong": "Something went wrong"
+  },
+  "actions": {
+    "tryAgain": "Try Again",
+    "goBack": "Go back"
+  },
+  "permission": {
+    "denied": "You don't have permission to view this.",
+    "askAdmin": "If you believe this is a mistake, ask your administrator to grant the necessary permission.",
+    "missing": "Missing:"
+  },
+  "theme": {
+    "switchToLight": "Switch to light theme",
+    "switchToDark": "Switch to dark theme"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "fr": "Français"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "feedback": {
+    "noData": "Aucune donnée",
+    "nothingYet": "Rien à afficher pour l'instant.",
+    "error": "Erreur",
+    "somethingWrong": "Une erreur s'est produite"
+  },
+  "actions": {
+    "tryAgain": "Réessayer",
+    "goBack": "Retour"
+  },
+  "permission": {
+    "denied": "Vous n'avez pas la permission de voir ceci.",
+    "askAdmin": "Si vous croyez qu'il s'agit d'une erreur, demandez à votre administrateur de vous accorder la permission nécessaire.",
+    "missing": "Manquant :"
+  },
+  "theme": {
+    "switchToLight": "Passer au thème clair",
+    "switchToDark": "Passer au thème sombre"
+  },
+  "language": {
+    "label": "Langue",
+    "en": "English",
+    "fr": "Français"
+  }
+}

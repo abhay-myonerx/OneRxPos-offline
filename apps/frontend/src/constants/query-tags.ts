@@ -1,0 +1,18 @@
+export const TAG = {
+  AUTH: "Auth",
+  TENANT: "Tenant",
+  STORE: "Store",
+  USER: "User",
+  PRODUCT: "Product",
+  CATEGORY: "Category",
+  INVENTORY: "Inventory",
+  CUSTOMER: "Customer",
+  SALE: "Sale",
+  PAYMENT: "Payment",
+  SUPPLIER: "Supplier",
+  PURCHASE: "Purchase",
+  EXPENSE: "Expense",
+  REPORT: "Report",
+  SETTINGS: "Settings",
+  RECEIPT: "Receipt",
+} as const;

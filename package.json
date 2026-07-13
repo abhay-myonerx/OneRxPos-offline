@@ -1,15 +1,22 @@
 {
-  "name": "onerx-pos",
+  "name": "onerxpos-offline",
   "private": true,
-  "packageManager": "pnpm@10.34.5",
-  "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
-  },
-  "devDependencies": {
-    "turbo": "^2.5.5",
-    "typescript": "^5.8.3"
-  }
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+ "scripts": {
+  "backend": "npm run dev --workspace=rx-pos-backend",
+  "frontend": "npm run dev --workspace=rx-pos-frontend",
+  "desktop": "npm run dev --workspace=rx-pos-desktop",
+  "shared": "npm run build --workspace=rx-pos-shared",
+
+  "backend:build": "npm run build --workspace=rx-pos-backend",
+  "frontend:build": "npm run build --workspace=rx-pos-frontend",
+  "desktop:build": "npm run build --workspace=rx-pos-desktop",
+
+  "lint": "npm run lint --workspaces",
+  "test": "npm run test --workspaces"
+}
 }

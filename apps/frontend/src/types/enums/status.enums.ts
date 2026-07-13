@@ -1,0 +1,68 @@
+export enum TenantStatus {
+  ACTIVE = "ACTIVE",
+  SUSPENDED = "SUSPENDED",
+  TRIAL = "TRIAL",
+  CANCELLED = "CANCELLED",
+}
+export enum TenantPlan {
+  FREE = "FREE",
+  STARTER = "STARTER",
+  PRO = "PRO",
+  ENTERPRISE = "ENTERPRISE",
+}
+export enum ProductType {
+  STANDARD = "STANDARD",
+  VARIABLE = "VARIABLE",
+  COMBO = "COMBO",
+  SERVICE = "SERVICE",
+}
+export enum SaleStatus {
+  COMPLETED = "COMPLETED",
+  PARTIAL = "PARTIAL",
+  VOIDED = "VOIDED",
+  RETURNED = "RETURNED",
+}
+export enum PaymentMethod {
+  CASH = "CASH",
+  CARD = "CARD",
+  MOBILE_BANKING = "MOBILE_BANKING",
+  GIFT_CARD = "GIFT_CARD",
+  STORE_CREDIT = "STORE_CREDIT",
+  LOYALTY = "LOYALTY",
+  OTHER = "OTHER",
+}
+export enum PaymentStatus {
+  COMPLETED = "COMPLETED",
+  PENDING = "PENDING",
+  FAILED = "FAILED",
+  REFUNDED = "REFUNDED",
+}
+export enum PurchaseStatus {
+  DRAFT = "DRAFT",
+  ORDERED = "ORDERED",
+  PARTIAL = "PARTIAL",
+  RECEIVED = "RECEIVED",
+  CANCELLED = "CANCELLED",
+}
+export enum TransferStatus {
+  PENDING = "PENDING",
+  IN_TRANSIT = "IN_TRANSIT",
+  COMPLETED = "COMPLETED",
+  CANCELLED = "CANCELLED",
+}
+export enum StockMovementType {
+  PURCHASE_IN = "PURCHASE_IN",
+  SALE = "SALE",
+  SALE_RETURN = "SALE_RETURN",
+  ADJUSTMENT_ADD = "ADJUSTMENT_ADD",
+  ADJUSTMENT_SUB = "ADJUSTMENT_SUB",
+  TRANSFER_IN = "TRANSFER_IN",
+  TRANSFER_OUT = "TRANSFER_OUT",
+  DAMAGE = "DAMAGE",
+}
+export enum LoyaltyTransactionType {
+  EARNED = "EARNED",
+  REDEEMED = "REDEEMED",
+  ADJUSTED = "ADJUSTED",
+  EXPIRED = "EXPIRED",
+}

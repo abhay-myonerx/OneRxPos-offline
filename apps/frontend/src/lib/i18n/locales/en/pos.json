@@ -1,0 +1,40 @@
+{
+  "cart": {
+    "add": "Add to cart",
+    "checkout": "Checkout"
+  },
+  "posAuth": {
+    "pinPad": {
+      "title": "Enter your PIN",
+      "subtitle": "6-digit PIN",
+      "backspace": "Backspace",
+      "wrongPin": "Incorrect PIN. Please try again.",
+      "lockedOut": "Too many attempts. This PIN is locked — try again later.",
+      "deviceNotEnrolled": "This device isn't enrolled. Ask a manager to enroll it before signing in.",
+      "genericError": "Unable to sign in. Please try again."
+    },
+    "enroll": {
+      "title": "Enroll this device",
+      "subtitle": "Choose the store this lane belongs to",
+      "storeLabel": "Store",
+      "storePlaceholder": "Select a store",
+      "nameLabel": "Device name (optional)",
+      "namePlaceholder": "e.g. Front Counter 1",
+      "submit": "Enroll device",
+      "submitting": "Enrolling…",
+      "success": "Device enrolled successfully",
+      "error": "Failed to enroll device"
+    },
+    "override": {
+      "title": "Manager override",
+      "subtitle": "Enter your PIN to authorize this action",
+      "lockedOut": "Too many attempts. This PIN is locked — try again later.",
+      "wrongPin": "Incorrect PIN. Please try again.",
+      "notAuthorized": "This user is not authorized for this action.",
+      "genericError": "Unable to authorize this override. Please try again."
+    },
+    "switchUser": {
+      "label": "Switch user"
+    }
+  }
+}
