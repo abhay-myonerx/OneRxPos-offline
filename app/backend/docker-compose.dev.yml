@@ -1,0 +1,43 @@
+# RX POS — local dev infrastructure ONLY (Postgres + Redis).
+# Isolated container names, volumes and 4000-series host ports so this project
+# does not interfere with any other Postgres/Redis on the machine.
+#
+# Start:  docker compose -f docker-compose.dev.yml up -d
+# Stop:   docker compose -f docker-compose.dev.yml down   (add -v to wipe data)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rxpos_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: posvelo
+      POSTGRES_USER: posvelo
+      POSTGRES_PASSWORD: posvelo_dev_pw
+    ports:
+      - "4432:5432"
+    volumes:
+      - rxpos_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posvelo -d posvelo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rxpos_redis
+    restart: unless-stopped
+    ports:
+      - "4379:6379"
+    volumes:
+      - rxpos_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rxpos_postgres_data:
+  rxpos_redis_data:

@@ -1,0 +1,12 @@
+[
+  { "name": "ON standard", "province": "ON", "category": "STANDARD", "unitPrice": "50", "qty": "2", "expectTaxTotal": "13.00", "expectGrand": "113.00" },
+  { "name": "AB standard", "province": "AB", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "5.00", "expectGrand": "105.00" },
+  { "name": "SK standard", "province": "SK", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "11.00", "expectGrand": "111.00" },
+  { "name": "MB standard", "province": "MB", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "12.00", "expectGrand": "112.00" },
+  { "name": "NS standard 14", "province": "NS", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "14.00", "expectGrand": "114.00" },
+  { "name": "NB standard 15", "province": "NB", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "15.00", "expectGrand": "115.00" },
+  { "name": "QC standard", "province": "QC", "category": "STANDARD", "unitPrice": "100", "qty": "1", "expectTaxTotal": "14.98", "expectGrand": "114.98" },
+  { "name": "ON zero-rated", "province": "ON", "category": "ZERO_RATED", "unitPrice": "100", "qty": "1", "expectTaxTotal": "0.00", "expectGrand": "100.00" },
+  { "name": "ON relief", "province": "ON", "category": "PROVINCIAL_RELIEF", "unitPrice": "100", "qty": "1", "expectTaxTotal": "5.00", "expectGrand": "105.00" },
+  { "name": "ON exempt", "province": "ON", "category": "EXEMPT", "unitPrice": "100", "qty": "1", "expectTaxTotal": "0.00", "expectGrand": "100.00" }
+]

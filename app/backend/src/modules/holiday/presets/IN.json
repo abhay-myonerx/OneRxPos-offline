@@ -1,0 +1,16 @@
+{
+  "countryCode": "IN",
+  "holidays": [
+    { "month": 1, "day": 1, "name": "New Year's Day", "type": "PUBLIC" },
+    { "month": 1, "day": 26, "name": "Republic Day", "type": "PUBLIC" },
+    { "month": 3, "day": 14, "name": "Holi", "type": "RELIGIOUS" },
+    { "month": 4, "day": 14, "name": "Dr. B.R. Ambedkar Jayanti", "type": "PUBLIC" },
+    { "month": 4, "day": 18, "name": "Good Friday", "type": "RELIGIOUS" },
+    { "month": 8, "day": 15, "name": "Independence Day", "type": "PUBLIC" },
+    { "month": 10, "day": 2, "name": "Gandhi Jayanti", "type": "PUBLIC" },
+    { "month": 10, "day": 2, "name": "Dussehra", "type": "RELIGIOUS" },
+    { "month": 10, "day": 20, "name": "Diwali", "type": "RELIGIOUS" },
+    { "month": 11, "day": 5, "name": "Guru Nanak Jayanti", "type": "RELIGIOUS" },
+    { "month": 12, "day": 25, "name": "Christmas Day", "type": "RELIGIOUS" }
+  ]
+}

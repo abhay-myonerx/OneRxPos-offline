@@ -1,0 +1,41 @@
+{
+  "name": "rx-pos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RX POS Electron desktop shell",
+  "main": "out/main.cjs",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "start": "npm run build && electron .",
+    "e2e": "playwright test",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "build:desktop:dir": "node scripts/build-desktop.mjs --dir",
+    "prepare:backend-resources": "node scripts/prepare-backend-resources.mjs",
+    "rebuild:native": "node scripts/rebuild-native.mjs",
+    "rebuild:native:backend": "node scripts/rebuild-native-backend.mjs",
+    "verify:native": "node scripts/verify-native-runner.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3-multiple-ciphers": "^12.11.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^24.0.0",
+    "electron": "42.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "javascript-obfuscator": "^5.4.3",
+    "prettier": "^3.9.4",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+# Generated / build artifacts — must NOT be reformatted (regenerated files
+# would otherwise fail `format:check` after the next build/prisma generate).
+node_modules/
+dist/
+build/
+out/
+coverage/
+src/generated/
+prisma/migrations/
+package-lock.json
