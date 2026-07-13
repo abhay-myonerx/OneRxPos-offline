@@ -1,12 +1,43 @@
-node_modules
-dist
-build
-coverage
-.env
-.env.*
+# Node
+node_modules/
+
+# Build
+dist/
+build/
+out/
+
+# Logs
+logs/
 *.log
+
+# Database
 *.sqlite
 *.sqlite3
 *.db
+
+# Env
+.env
+.env.*
+
+# IDE
 .vscode/settings.json
+.idea/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+
+# Electron
+release/
+
+# Next
+.next/
+
+# Turbo
+.turbo/
+
+# Cache
+.cache/
