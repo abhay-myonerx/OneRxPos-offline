@@ -20,7 +20,9 @@
       "@config/*": ["src/config/*"],
       "@modules/*": ["src/modules/*"],
       "@shared/*": ["src/shared/*"],
-      "@middleware/*": ["src/middleware/*"]
+      "@middleware/*": ["src/middleware/*"],
+      "rx-pos-shared": ["../../packages/shared/dist/index.d.ts"],
+      "rx-pos-shared/*": ["../../packages/shared/dist/*"]
     }
   },
   "include": ["src/**/*"],
