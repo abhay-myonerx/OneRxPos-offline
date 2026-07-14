@@ -6,17 +6,18 @@
     "apps/*",
     "packages/*"
   ],
- "scripts": {
-  "backend": "npm run dev --workspace=rx-pos-backend",
-  "frontend": "npm run dev --workspace=rx-pos-frontend",
-  "desktop": "npm run start --workspace=rx-pos-desktop",
-  "shared": "npm run build --workspace=rx-pos-shared",
-
-  "backend:build": "npm run build --workspace=rx-pos-backend",
-  "frontend:build": "npm run build --workspace=rx-pos-frontend",
-  "desktop:build": "npm run build --workspace=rx-pos-desktop",
-
-  "lint": "npm run lint --workspaces",
-  "test": "npm run test --workspaces"
-}
+  "scripts": {
+    "backend": "npm run dev --workspace=rx-pos-backend",
+    "frontend": "npm run dev --workspace=rx-pos-frontend",
+    "desktop": "npm run start --workspace=rx-pos-desktop",
+    "shared": "npm run build --workspace=rx-pos-shared",
+    "backend:build": "npm run build --workspace=rx-pos-backend",
+    "frontend:build": "npm run build --workspace=rx-pos-frontend",
+    "desktop:build": "npm run build --workspace=rx-pos-desktop",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1"
+  }
 }

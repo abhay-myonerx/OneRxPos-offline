@@ -24,7 +24,10 @@ const target = process.env.RXPOS_NATIVE_SQLCIPHER_ENTRY;
 if (target) {
   const originalResolveFilename = Module._resolveFilename;
   Module._resolveFilename = function (request, ...rest) {
-    if (request === "better-sqlite3-multiple-ciphers") {
+    if (
+      request === "better-sqlite3" ||
+      request === "better-sqlite3-multiple-ciphers"
+    ) {
       return originalResolveFilename.call(this, target, ...rest);
     }
     return originalResolveFilename.call(this, request, ...rest);
