@@ -8,10 +8,20 @@ import { applyHardening } from "./security/harden";
 import { resolveKiosk } from "./security/kiosk";
 import { recordCrashAndShouldRelaunch } from "./security/crash-history";
 import { keyFromEnv } from "./security/renderer-crypto";
-import { verifyBundleIntegrity, bundleIsEncrypted } from "./security/verify-bundle";
+import {
+  verifyBundleIntegrity,
+  bundleIsEncrypted,
+} from "./security/verify-bundle";
 import { getDeviceFingerprint } from "./security/device-fingerprint";
-import { startStoreNode, storeNodeDbPath, type StoreNodeHandle } from "./store-node/launcher";
-import { deriveStoreNodeDbKey, ensureStoreNodeReady } from "./store-node/onboarding";
+import {
+  startStoreNode,
+  storeNodeDbPath,
+  type StoreNodeHandle,
+} from "./store-node/launcher";
+import {
+  deriveStoreNodeDbKey,
+  ensureStoreNodeReady,
+} from "./store-node/onboarding";
 import { resolveStoreNodeResourcePaths } from "./store-node/resource-paths";
 import { loadOrCreateStoreNodeSecrets } from "./store-node/store-node-config";
 
@@ -44,8 +54,13 @@ function createWindow(apiOrigin: string): BrowserWindow {
 
   const entry = resolveEntry({
     isPackaged: app.isPackaged,
-    devServerUrl: process.env.RXPOS_DEV_SERVER ?? "http://localhost:4000",
+    devServerUrl: process.env.RXPOS_DEV_SERVER ?? "http://localhost:3000",
   });
+
+  console.log("==================================");
+  console.log("Electron Entry:", entry);
+  console.log("Electron URL :", entry.url);
+  console.log("==================================");
   win.loadURL(entry.url);
   return win;
 }
@@ -69,13 +84,17 @@ function makeStoreNodeLogger(userDataDir: string): {
   // crash-loop guard relaunches a fresh process, which re-truncates) rather
   // than growing without bound across every run.
   try {
-    writeFileSync(logPath, `=== store-node boot log — ${new Date().toISOString()} ===\n`);
+    writeFileSync(
+      logPath,
+      `=== store-node boot log — ${new Date().toISOString()} ===\n`,
+    );
   } catch {
     // best-effort — never let logging setup break boot
   }
   const log = (line: string): void => {
     storeNodeLogTail.push(line);
-    if (storeNodeLogTail.length > STORE_NODE_LOG_TAIL_MAX) storeNodeLogTail.shift();
+    if (storeNodeLogTail.length > STORE_NODE_LOG_TAIL_MAX)
+      storeNodeLogTail.shift();
     console.log(line);
     try {
       appendFileSync(logPath, line + "\n");
@@ -182,7 +201,10 @@ app.whenReady().then(async () => {
     const secrets = loadOrCreateStoreNodeSecrets(userDataDir);
     setupAccessCode = secrets.SETUP_ACCESS_CODE;
     const dbPath = storeNodeDbPath(userDataDir);
-    const key = deriveStoreNodeDbKey({ backendDir, masterKey: secrets.LOCAL_DB_MASTER_KEY });
+    const key = deriveStoreNodeDbKey({
+      backendDir,
+      masterKey: secrets.LOCAL_DB_MASTER_KEY,
+    });
     const { firstRun } = await ensureStoreNodeReady({
       dbPath,
       key,
@@ -196,7 +218,9 @@ app.whenReady().then(async () => {
       onLog: logStoreNode,
     });
     if (firstRun) {
-      console.log("Store-node: first run — schema pushed to a fresh encrypted local DB.");
+      console.log(
+        "Store-node: first run — schema pushed to a fresh encrypted local DB.",
+      );
     }
 
     storeNode = await startStoreNode({
@@ -246,7 +270,9 @@ app.whenReady().then(async () => {
     const integrity = verifyBundleIntegrity(dir);
     if (!integrity.ok) {
       // Fail closed: a tampered/replaced renderer bundle must not run.
-      console.error(`Integrity check failed: ${integrity.mismatch ?? "unknown"}`);
+      console.error(
+        `Integrity check failed: ${integrity.mismatch ?? "unknown"}`,
+      );
       app.quit();
       return;
     }
