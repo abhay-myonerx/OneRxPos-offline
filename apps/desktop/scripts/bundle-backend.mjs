@@ -137,6 +137,10 @@ const UNSAFE_ROOT_PACKAGES = [
   "@prisma/client",
   "@prisma/adapter-better-sqlite3",
   "@prisma/adapter-pg",
+  // Explicitly protect the complete Prisma driver-adapter runtime chain.
+  // @prisma/adapter-pg -> @prisma/driver-adapter-utils -> @prisma/debug
+  "@prisma/driver-adapter-utils",
+  "@prisma/debug",
   "pino",
   "pino-pretty",
   "socket.io",
@@ -172,18 +176,63 @@ const UNSAFE_ROOT_PACKAGES = [
 function computeUnsafeClosure(roots, nodeModulesDir) {
   const closure = new Set();
   const queue = [...roots];
+
   while (queue.length > 0) {
     const name = queue.shift();
-    if (closure.has(name)) continue;
-    closure.add(name);
+
+    if (!name || closure.has(name)) {
+      continue;
+    }
+
     const pkgJsonPath = path.join(nodeModulesDir, name, "package.json");
-    if (!existsSync(pkgJsonPath)) continue; // optional/platform dep not installed here — fine
-    const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
-    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.optionalDependencies ?? {}) };
-    for (const dep of Object.keys(deps)) {
-      if (!closure.has(dep)) queue.push(dep);
+
+    // Optional/platform-specific package not installed for this target.
+    if (!existsSync(pkgJsonPath)) {
+      continue;
+    }
+
+    closure.add(name);
+
+    let pkg;
+
+    try {
+      pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
+    } catch (error) {
+      throw new Error(
+        `computeUnsafeClosure: failed to parse ${pkgJsonPath}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const runtimeDependencies = {
+      ...(pkg.dependencies ?? {}),
+      ...(pkg.optionalDependencies ?? {}),
+    };
+
+    for (const dependencyName of Object.keys(runtimeDependencies)) {
+      if (!closure.has(dependencyName)) {
+        queue.push(dependencyName);
+      }
+    }
+
+    // Preserve installed peers that an external package may load at runtime.
+    for (const peerName of Object.keys(pkg.peerDependencies ?? {})) {
+      const peerPackageJsonPath = path.join(
+        nodeModulesDir,
+        peerName,
+        "package.json",
+      );
+
+      if (
+        existsSync(peerPackageJsonPath) &&
+        !closure.has(peerName)
+      ) {
+        queue.push(peerName);
+      }
     }
   }
+
   return closure;
 }
 
@@ -359,10 +408,59 @@ export async function bundleBackend(stagingDir, opts = {}) {
     const m = /^node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)[\\/]/.exec(p);
     if (m) inlinedPkgs.add(m[1].split(path.sep).join("/").replace(/\\/g, "/"));
   }
-  const deletablePkgs = [...inlinedPkgs].filter((p) => !unsafeClosure.has(p));
-  for (const p of deletablePkgs) {
-    rmSync(path.join(nodeModulesDir, p), { recursive: true, force: true });
+  const deletablePkgs = [...inlinedPkgs].filter(
+    (packageName) => !unsafeClosure.has(packageName),
+  );
+
+  for (const packageName of deletablePkgs) {
+    rmSync(path.join(nodeModulesDir, packageName), {
+      recursive: true,
+      force: true,
+    });
   }
+
+  // Fail the build before producing a broken installer if a critical external
+  // runtime package was accidentally removed by the bundle/prune pass.
+  const CRITICAL_RUNTIME_PACKAGES = [
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "@prisma/adapter-better-sqlite3",
+    "@prisma/driver-adapter-utils",
+    "@prisma/debug",
+    "zod",
+    "dotenv",
+  ];
+
+  console.log(
+    "\n[bundle-backend] Validating critical runtime dependencies...",
+  );
+
+  for (const packageName of CRITICAL_RUNTIME_PACKAGES) {
+    const packageJsonPath = path.join(
+      nodeModulesDir,
+      packageName,
+      "package.json",
+    );
+
+    if (!existsSync(packageJsonPath)) {
+      throw new Error(
+        [
+          "bundleBackend: critical packaged runtime dependency missing.",
+          "",
+          `Package: ${packageName}`,
+          `Expected: ${packageJsonPath}`,
+          "",
+          "The backend bundle/prune pass produced an invalid runtime dependency tree.",
+        ].join("\n"),
+      );
+    }
+
+    console.log(`[bundle-backend] OK node_modules/${packageName}`);
+  }
+
+  console.log(
+    "[bundle-backend] Critical runtime dependency validation passed.\n",
+  );
 
   return {
     outfile,

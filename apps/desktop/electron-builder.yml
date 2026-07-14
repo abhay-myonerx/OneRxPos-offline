@@ -1,127 +1,456 @@
 appId: com.onerx.rxpos
 productName: RX POS
 
+# ============================================================
+# OUTPUT
+# ============================================================
+
 directories:
   output: dist-desktop
 
+# ============================================================
+# NATIVE ELECTRON MODULES
+# ============================================================
+#
 # Native Electron modules are prepared explicitly by:
-# scripts/rebuild-native-backend.mjs
 #
-# The backend uses a private Electron ABI-146 build of
-# better-sqlite3-multiple-ciphers under desktop/native.
+#   scripts/rebuild-native-backend.mjs
 #
-# Do not let electron-builder run @electron/rebuild again against
-# the root npm workspace. The custom native rebuild pipeline has
-# already prepared the correct Electron-compatible native binary.
+# RX POS uses a private Electron ABI-146 build of:
+#
+#   better-sqlite3-multiple-ciphers
+#
+# The Electron-compatible native module is stored under:
+#
+#   apps/desktop/native
+#
+# Do not let electron-builder run @electron/rebuild against the
+# root npm workspace.
+#
+# The custom native rebuild pipeline already prepares the correct
+# Electron-compatible native binary.
+#
+# This also prevents the backend's normal Node.js native build
+# from being overwritten with an Electron ABI build.
+
 npmRebuild: false
 
+# ============================================================
+# ELECTRON MAIN / PRELOAD FILES
+# ============================================================
+
 files:
+  # Compiled Electron main and preload output.
   - out/**
-  # esbuild emits .map files for local debugging;
-  # keep them out of the shipped asar.
+
+  # esbuild source maps are useful during local debugging but
+  # should not be shipped inside app.asar.
   - "!out/**/*.map"
 
-# Renderer encryption + integrity manifest are applied via the afterPack hook
-# (scripts/harden-pack.mjs); asar integrity is embedded by electron-builder v25
-# automatically.
+  # ----------------------------------------------------------
+  # DUPLICATE SQLCIPHER NATIVE MODULE
+  # ----------------------------------------------------------
+  #
+  # The Electron-compatible SQLCipher module is shipped through:
+  #
+  #   extraResources/native
+  #
+  # Do not package a second desktop node_modules copy into:
+  #
+  #   app.asar.unpacked/node_modules
+  #
+
+  - "!node_modules/better-sqlite3-multiple-ciphers/**"
+
+  # ----------------------------------------------------------
+  # SAFE DEVELOPMENT METADATA PRUNING
+  # ----------------------------------------------------------
+
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/README*"
+  - "!node_modules/**/CHANGELOG*"
+  - "!node_modules/**/HISTORY*"
+
+# ============================================================
+# ASAR
+# ============================================================
 #
-# TEMPORARILY DISABLED FOR LOCAL TESTING:
+# Electron main/preload code is stored in app.asar.
 #
-# EV code-signing is intentionally disabled for the current local test build.
-#
-# WIN_CSC_LINK
-# WIN_CSC_KEY_PASSWORD
-#
-# Do not configure the certificate environment variables while testing.
-# Re-enable code signing before producing the customer/production release.
-#
-# Runtime Electron fuses are deferred to a later
-# verified-hardening pass.
+# electron-builder v25 applies ASAR integrity metadata to the
+# packaged executable automatically.
+
 asar: true
+
+# ============================================================
+# PACKAGING HARDENING
+# ============================================================
+#
+# Renderer hardening and integrity processing are performed by:
+#
+#   scripts/harden-pack.mjs
+#
+# RENDERER_ENCRYPTION_KEY controls renderer encryption.
+#
+# Code signing is intentionally not forced in this YAML.
+#
+# For the current local/test build:
+#
+#   WIN_CSC_LINK              unset
+#   WIN_CSC_KEY_PASSWORD      unset
+#
+# electron-builder therefore creates an unsigned build.
+#
+# For the production/customer build, configure those environment
+# variables and electron-builder can use the normal signing path.
+#
+# IMPORTANT:
+#
+# Do not set:
+#
+#   signAndEditExecutable: false
+#
+# The previous working RX POS configuration allowed
+# electron-builder to use its normal Windows/NSIS executable
+# processing pipeline even for unsigned builds.
 
 afterPack: ./scripts/harden-pack.mjs
 
-# SN-5 prune pass:
-# Ship only the Electron UI languages this app actually offers
-# instead of Electron's full locale set.
+# ============================================================
+# ELECTRON LANGUAGES
+# ============================================================
+#
+# RX POS currently exposes English and French.
+#
+# Avoid shipping Electron's complete locale collection.
+
 electronLanguages:
   - en-US
   - fr
 
+# ============================================================
+# EXTRA RESOURCES
+# ============================================================
+
 extraResources:
-  # Electron renderer.
+  # ----------------------------------------------------------
+  # FRONTEND RENDERER
+  # ----------------------------------------------------------
   #
-  # The frontend SPA is built by build-desktop.mjs before
-  # electron-builder runs.
+  # The frontend SPA is built by:
   #
-  # It is served through app:// by:
-  # bundleDir(process.resourcesPath)/renderer
+  #   scripts/build-desktop.mjs
+  #
+  # before electron-builder runs.
+  #
+  # It is served through app:// from:
+  #
+  #   <process.resourcesPath>/renderer
+  #
+
   - from: ../frontend/dist
     to: renderer
+    filter:
+      - "**/*"
 
-  # SN-5 Task 3:
+      # Production renderer does not require source maps.
+      - "!**/*.map"
+
+  # ----------------------------------------------------------
+  # OFFLINE STORE-NODE BACKEND
+  # ----------------------------------------------------------
   #
-  # Store-node backend staged by:
-  # scripts/prepare-backend-resources.mjs
+  # Backend resources are prepared by:
   #
-  # The staging pipeline creates a PRODUCTION-ONLY dependency
-  # closure using npm ci --omit=dev and the package-lock based
-  # production staging process.
+  #   scripts/prepare-backend-resources.mjs
   #
-  # The resulting backend contains:
-  #   dist/
-  #   node_modules/
-  #   prisma/
+  # The staging process creates the production runtime under:
   #
-  # file: dependency symlinks are dereferenced into real files
-  # during staging so development-machine workspace links are
-  # never shipped in the installed application.
+  #   .staging/backend
   #
-  # main.ts resolveStoreNodeResourcePaths() reads the backend as:
+  # Current staging pipeline:
   #
-  # <process.resourcesPath>/backend
+  #   - builds rx-pos-backend
+  #   - builds rx-pos-shared
+  #   - generates the SQLite Prisma Client
+  #   - preserves the PostgreSQL Prisma Client
+  #   - copies Prisma engines
+  #   - installs production-only dependencies
+  #   - bundles the backend into server.bundle.cjs
+  #   - obfuscates server.bundle.cjs
+  #   - removes application modules inlined by esbuild
+  #   - removes npm packages inlined by esbuild
   #
-  # when app.isPackaged is true.
+  # Packaged location:
+  #
+  #   <process.resourcesPath>/backend
+  #
+  # IMPORTANT:
+  #
+  # Do not aggressively remove Prisma runtime packages here.
+  #
+  # Runtime dependencies such as:
+  #
+  #   @prisma/debug
+  #   @prisma/driver-adapter-utils
+  #
+  # are required by @prisma/adapter-pg.
+  #
+
   - from: .staging/backend
     to: backend
+    filter:
+      - "**/*"
 
-  # WATCH-SN4-1:
+      # ------------------------------------------------------
+      # SOURCE MAPS
+      # ------------------------------------------------------
+
+      - "!**/*.map"
+
+      # ------------------------------------------------------
+      # TEST FILES
+      # ------------------------------------------------------
+
+      - "!**/__tests__/**"
+
+      - "!**/*.test.js"
+      - "!**/*.test.cjs"
+      - "!**/*.test.mjs"
+
+      - "!**/*.spec.js"
+      - "!**/*.spec.cjs"
+      - "!**/*.spec.mjs"
+
+      # ------------------------------------------------------
+      # TYPESCRIPT SOURCE
+      # ------------------------------------------------------
+
+      - "!**/*.ts"
+      - "!**/*.tsx"
+
+      # ------------------------------------------------------
+      # TYPESCRIPT DECLARATIONS
+      # ------------------------------------------------------
+
+      - "!**/*.d.ts"
+      - "!**/*.d.ts.map"
+
+      # ------------------------------------------------------
+      # DOCUMENTATION
+      # ------------------------------------------------------
+
+      - "!**/README*"
+      - "!**/CHANGELOG*"
+      - "!**/HISTORY*"
+
+      - "!**/docs/**"
+      - "!**/examples/**"
+      - "!**/example/**"
+
+      # ------------------------------------------------------
+      # DEVELOPMENT / TEST OUTPUT
+      # ------------------------------------------------------
+
+      - "!**/test/**"
+      - "!**/tests/**"
+      - "!**/coverage/**"
+
+      # ------------------------------------------------------
+      # GIT / IDE METADATA
+      # ------------------------------------------------------
+
+      - "!**/.git/**"
+      - "!**/.github/**"
+      - "!**/.gitignore"
+
+      - "!**/.vscode/**"
+      - "!**/.idea/**"
+
+      # ------------------------------------------------------
+      # NPM METADATA
+      # ------------------------------------------------------
+
+      - "!**/.npmignore"
+
+      # ------------------------------------------------------
+      # PRISMA CLI / BUILD TOOLING
+      # ------------------------------------------------------
+      #
+      # These packages are not required by the packaged runtime.
+      #
+      # The prepare-backend-resources script already removes
+      # most of them.
+      #
+      # These filters act only as a packaging safety guard.
+      #
+      # DO NOT ADD:
+      #
+      #   !node_modules/@prisma/debug/**
+      #   !node_modules/@prisma/driver-adapter-utils/**
+      #
+
+      - "!node_modules/prisma/**"
+      - "!node_modules/@prisma/cli/**"
+
+      - "!node_modules/@prisma/engines/**"
+      - "!node_modules/@prisma/engines-version/**"
+
+      - "!node_modules/@prisma/fetch-engine/**"
+      - "!node_modules/@prisma/get-platform/**"
+
+      # ------------------------------------------------------
+      # UNUSED PRISMA PROVIDER RUNTIME ASSETS
+      # ------------------------------------------------------
+      #
+      # RX POS uses:
+      #
+      #   PostgreSQL
+      #   SQLite
+      #
+      # Keep PostgreSQL and SQLite assets.
+      #
+      # Remove provider-specific WASM runtime files for databases
+      # not used by RX POS.
+      #
+
+      - "!node_modules/@prisma/client/runtime/*cockroachdb*"
+      - "!node_modules/@prisma/client/runtime/*mysql*"
+      - "!node_modules/@prisma/client/runtime/*sqlserver*"
+
+  # ----------------------------------------------------------
+  # ELECTRON ABI SQLCIPHER NATIVE MODULE
+  # ----------------------------------------------------------
   #
-  # Desktop-owned Electron ABI-146 native prebuild of:
-  # better-sqlite3-multiple-ciphers
+  # Desktop-owned Electron ABI-146 prebuild of:
+  #
+  #   better-sqlite3-multiple-ciphers
   #
   # Prepared by:
-  # scripts/rebuild-native-backend.mjs
+  #
+  #   scripts/rebuild-native-backend.mjs
   #
   # The spawned backend's native require is redirected to this
-  # private Electron-compatible copy at runtime.
+  # private Electron-compatible copy.
+  #
+  # The previous working configuration shipped the complete
+  # node_modules subtree.
+  #
+  # To stay close to the known-good build, keep that behavior.
+  #
+  # This is intentionally less aggressive than the previous
+  # native filter experiment.
+
   - from: native
     to: native
     filter:
       - package.json
       - "node_modules/**/*"
 
-  # Loose runtime scripts.
+      # Safe size pruning only.
+      - "!node_modules/**/*.map"
+      - "!node_modules/**/README*"
+      - "!node_modules/**/CHANGELOG*"
+      - "!node_modules/**/HISTORY*"
+
+  # ----------------------------------------------------------
+  # LOOSE RUNTIME SCRIPTS
+  # ----------------------------------------------------------
   #
-  # electron-native-require-hook.cjs:
-  # redirects the backend native require to the desktop-owned
-  # Electron ABI-compatible native dependency.
-  #
-  # push-sqlite-schema-oneshot.cjs:
-  # performs the SQLite schema push during onboarding.
-  #
-  # These scripts are executed as --require / argv paths and must
-  # remain loose under process.resourcesPath instead of app.asar.
+  # These scripts are used as direct runtime paths and therefore
+  # must remain outside app.asar.
+
   - from: scripts
     to: scripts
     filter:
+      # Redirects the backend native require to the private
+      # Electron ABI-compatible SQLCipher native dependency.
       - electron-native-require-hook.cjs
+
+      # Performs SQLite schema initialization during onboarding.
       - push-sqlite-schema-oneshot.cjs
 
+# ============================================================
+# WINDOWS
+# ============================================================
+#
+# Build the NSIS Windows installer.
+#
+# electron-builder's x64 target supports standard 64-bit:
+#
+#   Intel Windows processors
+#   AMD Ryzen processors
+#   AMD EPYC processors
+#
+# AMD DOES NOT need a separate "amd" architecture target.
+#
+# x64 = AMD64 / Intel 64.
+#
+# ARM64 is intentionally not included because the current native
+# SQLCipher prebuild pipeline explicitly installs:
+#
+#   --arch x64
+
 win:
-  target: nsis
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+# ============================================================
+# NSIS INSTALLER
+# ============================================================
+#
+# Keep these settings aligned with the previous known-good
+# electron-builder configuration.
 
 nsis:
+  # Use the installer wizard instead of one-click installation.
   oneClick: false
+
+  # Install for the current user.
   perMachine: false
+
+  # Allow the user to select the installation directory.
   allowToChangeInstallationDirectory: true
+
+# ============================================================
+# MACOS
+# ============================================================
+#
+# Build Intel x64 macOS DMG.
+#
+# IMPORTANT:
+#
+# The current native rebuild script shown in the build output
+# explicitly prepares:
+#
+#   prebuild-install --runtime electron
+#                    --target 42.0.0
+#                    --arch x64
+#
+# Before distributing macOS builds, verify that
+# better-sqlite3-multiple-ciphers has a Darwin Electron ABI-146
+# binary and that rebuild-native-backend.mjs handles macOS.
+#
+# Apple Silicon ARM64 is intentionally not enabled yet.
+#
+# identity: null keeps the current local/test macOS build
+# unsigned.
+
+mac:
+  identity: null
+
+  target:
+    - target: dmg
+      arch:
+        - x64
+
+  category: public.app-category.business
+
+# ============================================================
+# MACOS DMG
+# ============================================================
+
+dmg:
+  writeUpdateInfo: false

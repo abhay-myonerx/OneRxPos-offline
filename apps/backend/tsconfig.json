@@ -13,16 +13,28 @@
     "resolveJsonModule": true,
     "declaration": false,
     "declarationMap": false,
-    "sourceMap": true,
+    "sourceMap": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
       "@config/*": ["src/config/*"],
       "@modules/*": ["src/modules/*"],
       "@shared/*": ["src/shared/*"],
-      "@middleware/*": ["src/middleware/*"]
+      "@middleware/*": ["src/middleware/*"],
+      "rx-pos-shared": ["../../packages/shared/dist/index.d.ts"],
+      "rx-pos-shared/*": ["../../packages/shared/dist/*"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "prisma"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "prisma",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.ts",
+    "src/**/*.spec.tsx"
+  ]
 }
