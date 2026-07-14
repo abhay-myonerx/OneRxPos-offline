@@ -15,7 +15,7 @@ import { signingBanner } from "./signing-status.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(__dirname, "..");
-const frontendDir = path.resolve(desktopDir, "..", "rx-pos-frontend");
+const frontendDir = path.resolve(desktopDir, "..", "frontend");
 
 const dirTarget = process.argv.includes("--dir");
 

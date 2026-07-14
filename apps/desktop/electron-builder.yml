@@ -1,59 +1,123 @@
 appId: com.onerx.rxpos
 productName: RX POS
+
 directories:
   output: dist-desktop
+
+# Native Electron modules are prepared explicitly by:
+# scripts/rebuild-native-backend.mjs
+#
+# The backend uses a private Electron ABI-146 build of
+# better-sqlite3-multiple-ciphers under desktop/native.
+#
+# Do not let electron-builder run @electron/rebuild again against
+# the root npm workspace. The custom native rebuild pipeline has
+# already prepared the correct Electron-compatible native binary.
+npmRebuild: false
+
 files:
   - out/**
-  # esbuild emits .map files for local debugging; keep them out of the shipped asar.
+  # esbuild emits .map files for local debugging;
+  # keep them out of the shipped asar.
   - "!out/**/*.map"
+
 # Renderer encryption + integrity manifest are applied via the afterPack hook
 # (scripts/harden-pack.mjs); asar integrity is embedded by electron-builder v25
-# automatically. EV code-signing is enabled by setting the standard
-# WIN_CSC_LINK (path/URL to the .pfx) + WIN_CSC_KEY_PASSWORD env vars, which
-# electron-builder reads and applies natively — unset in dev/CI means an
-# unsigned build. A real EV cert is a logged deferral. Runtime Electron fuses
-# are deferred to a later verified-hardening pass.
+# automatically.
+#
+# EV code-signing is enabled by setting the standard:
+# WIN_CSC_LINK (path/URL to the .pfx)
+# WIN_CSC_KEY_PASSWORD
+#
+# electron-builder reads and applies these natively.
+# Unset in dev/CI means an unsigned build.
+#
+# Runtime Electron fuses are deferred to a later
+# verified-hardening pass.
 asar: true
+
 afterPack: ./scripts/harden-pack.mjs
-# SN-5 prune pass: ship only the Electron UI languages this app actually
-# offers (see rx-pos-frontend's i18n config) instead of Electron's full
-# ~55-locale set (~48MB unpruned -> ~2MB for these two).
+
+# SN-5 prune pass:
+# Ship only the Electron UI languages this app actually offers
+# instead of Electron's full locale set.
 electronLanguages:
   - en-US
   - fr
+
 extraResources:
-  - from: ../rx-pos-frontend/dist
-    to: renderer # served by app:// via bundleDir(process.resourcesPath)/renderer
-  # SN-5 Task 3 (+ SN-5 prune pass): the store-node backend, staged by
-  # scripts/prepare-backend-resources.mjs (run before electron-builder by
-  # build-desktop.mjs) into .staging/backend — a PRODUCTION-ONLY (npm ci
-  # --omit=dev, see that script's header), flattened copy of rx-pos-backend's
-  # dist/ + node_modules/ + prisma/ with the two `file:` dependency symlinks
-  # (rx-pos-shared, better-sqlite3 -> its sqlcipher-shim) dereferenced into
-  # real files, since a raw symlink into this dev machine's sibling-repo
-  # checkout wouldn't survive being installed elsewhere. main.ts's
-  # resolveStoreNodeResourcePaths() reads this back as
-  # `<resourcesPath>/backend` when app.isPackaged.
+  # Electron renderer.
+  #
+  # The frontend SPA is built by build-desktop.mjs before
+  # electron-builder runs.
+  #
+  # It is served through app:// by:
+  # bundleDir(process.resourcesPath)/renderer
+  - from: ../frontend/dist
+    to: renderer
+
+  # SN-5 Task 3:
+  #
+  # Store-node backend staged by:
+  # scripts/prepare-backend-resources.mjs
+  #
+  # The staging pipeline creates a PRODUCTION-ONLY dependency
+  # closure using npm ci --omit=dev and the package-lock based
+  # production staging process.
+  #
+  # The resulting backend contains:
+  #   dist/
+  #   node_modules/
+  #   prisma/
+  #
+  # file: dependency symlinks are dereferenced into real files
+  # during staging so development-machine workspace links are
+  # never shipped in the installed application.
+  #
+  # main.ts resolveStoreNodeResourcePaths() reads the backend as:
+  #
+  # <process.resourcesPath>/backend
+  #
+  # when app.isPackaged is true.
   - from: .staging/backend
     to: backend
-  # WATCH-SN4-1: the desktop-owned, Electron ABI-146 prebuild of
-  # better-sqlite3-multiple-ciphers (scripts/rebuild-native-backend.mjs) that
-  # the spawned backend's native require is redirected to at runtime.
+
+  # WATCH-SN4-1:
+  #
+  # Desktop-owned Electron ABI-146 native prebuild of:
+  # better-sqlite3-multiple-ciphers
+  #
+  # Prepared by:
+  # scripts/rebuild-native-backend.mjs
+  #
+  # The spawned backend's native require is redirected to this
+  # private Electron-compatible copy at runtime.
   - from: native
     to: native
     filter:
       - package.json
       - "node_modules/**/*"
-  # The --require hook that performs that redirect + the schema-push one-shot
-  # (onboarding.ts) — both spawned as `--require`/argv script paths, so they
-  # must live as loose files under resourcesPath, not inside app.asar.
+
+  # Loose runtime scripts.
+  #
+  # electron-native-require-hook.cjs:
+  # redirects the backend native require to the desktop-owned
+  # Electron ABI-compatible native dependency.
+  #
+  # push-sqlite-schema-oneshot.cjs:
+  # performs the SQLite schema push during onboarding.
+  #
+  # These scripts are executed as --require / argv paths and must
+  # remain loose under process.resourcesPath instead of app.asar.
   - from: scripts
     to: scripts
     filter:
       - electron-native-require-hook.cjs
       - push-sqlite-schema-oneshot.cjs
+
 win:
   target: nsis
+
 nsis:
   oneClick: false
   perMachine: false
