@@ -4,124 +4,270 @@ productName: RX POS
 directories:
   output: dist-desktop
 
+# ============================================================
+# NATIVE MODULE BUILD
+# ============================================================
+#
 # Native Electron modules are prepared explicitly by:
+#
 # scripts/rebuild-native-backend.mjs
 #
-# The backend uses a private Electron ABI-146 build of
-# better-sqlite3-multiple-ciphers under desktop/native.
+# RX POS uses:
 #
-# Do not let electron-builder run @electron/rebuild again against
-# the root npm workspace. The custom native rebuild pipeline has
-# already prepared the correct Electron-compatible native binary.
+# better-sqlite3-multiple-ciphers
+#
+# This native dependency MUST be compiled/prebuilt for the
+# target Electron runtime, operating system, and CPU architecture.
+#
+# Supported target architecture plan:
+#
+# Windows:
+#   x64   -> Intel 64-bit + AMD Ryzen/AMD64
+#   arm64 -> Windows ARM devices
+#
+# macOS:
+#   x64   -> Intel Macs
+#   arm64 -> Apple Silicon (M1/M2/M3/M4/M5)
+#
+# Do not let electron-builder automatically rebuild native
+# dependencies because RX POS owns the native rebuild pipeline.
+#
 npmRebuild: false
+
+# ============================================================
+# APPLICATION FILES
+# ============================================================
 
 files:
   - out/**
-  # esbuild emits .map files for local debugging;
-  # keep them out of the shipped asar.
+
+  # esbuild source maps are useful locally but should not be
+  # included in the packaged application.
   - "!out/**/*.map"
 
-# Renderer encryption + integrity manifest are applied via the afterPack hook
-# (scripts/harden-pack.mjs); asar integrity is embedded by electron-builder v25
-# automatically.
-#
-# TEMPORARILY DISABLED FOR LOCAL TESTING:
-#
-# EV code-signing is intentionally disabled for the current local test build.
-#
-# WIN_CSC_LINK
-# WIN_CSC_KEY_PASSWORD
-#
-# Do not configure the certificate environment variables while testing.
-# Re-enable code signing before producing the customer/production release.
-#
-# Runtime Electron fuses are deferred to a later
-# verified-hardening pass.
+# ============================================================
+# ASAR
+# ============================================================
+
+# Package Electron main/preload application code into app.asar.
 asar: true
 
+# ============================================================
+# HARDENING
+# ============================================================
+#
+# Renderer encryption/integrity processing.
+#
+# During development:
+#
+# RENDERER_ENCRYPTION_KEY may remain unset.
+#
+# harden-pack.mjs currently skips encryption when the environment
+# variable is unavailable.
+#
 afterPack: ./scripts/harden-pack.mjs
 
-# SN-5 prune pass:
-# Ship only the Electron UI languages this app actually offers
-# instead of Electron's full locale set.
+# ============================================================
+# ELECTRON LANGUAGES
+# ============================================================
+#
+# Ship only languages supported by RX POS.
+#
 electronLanguages:
   - en-US
   - fr
 
+# ============================================================
+# EXTRA RESOURCES
+# ============================================================
+
 extraResources:
-  # Electron renderer.
+  # ----------------------------------------------------------
+  # FRONTEND SPA
+  # ----------------------------------------------------------
   #
-  # The frontend SPA is built by build-desktop.mjs before
-  # electron-builder runs.
+  # Built by:
   #
-  # It is served through app:// by:
-  # bundleDir(process.resourcesPath)/renderer
+  # npm run build:spa
+  #
+  # Served through:
+  #
+  # app://bundle/index.html
+  #
   - from: ../frontend/dist
     to: renderer
 
-  # SN-5 Task 3:
+  # ----------------------------------------------------------
+  # STORE-NODE BACKEND
+  # ----------------------------------------------------------
   #
-  # Store-node backend staged by:
+  # Prepared by:
+  #
   # scripts/prepare-backend-resources.mjs
   #
-  # The staging pipeline creates a PRODUCTION-ONLY dependency
-  # closure using npm ci --omit=dev and the package-lock based
-  # production staging process.
+  # Contains the production-only backend runtime:
   #
-  # The resulting backend contains:
   #   dist/
   #   node_modules/
   #   prisma/
   #
-  # file: dependency symlinks are dereferenced into real files
-  # during staging so development-machine workspace links are
-  # never shipped in the installed application.
-  #
-  # main.ts resolveStoreNodeResourcePaths() reads the backend as:
+  # Runtime location:
   #
   # <process.resourcesPath>/backend
   #
-  # when app.isPackaged is true.
   - from: .staging/backend
     to: backend
 
-  # WATCH-SN4-1:
+  # ----------------------------------------------------------
+  # NATIVE DATABASE MODULE
+  # ----------------------------------------------------------
   #
-  # Desktop-owned Electron ABI-146 native prebuild of:
+  # Target-specific Electron native build of:
+  #
   # better-sqlite3-multiple-ciphers
   #
-  # Prepared by:
-  # scripts/rebuild-native-backend.mjs
+  # IMPORTANT:
   #
-  # The spawned backend's native require is redirected to this
-  # private Electron-compatible copy at runtime.
+  # scripts/rebuild-native-backend.mjs MUST build the correct
+  # binary for the current target:
+  #
+  # win32-x64
+  # win32-arm64
+  # darwin-x64
+  # darwin-arm64
+  #
   - from: native
     to: native
     filter:
       - package.json
       - "node_modules/**/*"
 
-  # Loose runtime scripts.
+  # ----------------------------------------------------------
+  # LOOSE RUNTIME SCRIPTS
+  # ----------------------------------------------------------
   #
-  # electron-native-require-hook.cjs:
-  # redirects the backend native require to the desktop-owned
-  # Electron ABI-compatible native dependency.
+  # These files must remain outside app.asar because Electron
+  # launches them through --require / argv.
   #
-  # push-sqlite-schema-oneshot.cjs:
-  # performs the SQLite schema push during onboarding.
-  #
-  # These scripts are executed as --require / argv paths and must
-  # remain loose under process.resourcesPath instead of app.asar.
   - from: scripts
     to: scripts
     filter:
       - electron-native-require-hook.cjs
       - push-sqlite-schema-oneshot.cjs
 
+# ============================================================
+# WINDOWS
+# ============================================================
+#
+# x64 supports:
+#
+#   Intel Core 64-bit
+#   Intel Xeon 64-bit
+#   AMD Ryzen
+#   AMD Athlon 64-bit
+#   AMD EPYC
+#
+# arm64 supports:
+#
+#   Snapdragon Windows PCs
+#   Windows ARM devices
+#
 win:
-  target: nsis
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+
+  # ----------------------------------------------------------
+  # TEMPORARY DEVELOPMENT CONFIGURATION
+  # ----------------------------------------------------------
+  #
+  # Code signing is currently disabled for local testing.
+  #
+  # Remove this before production/customer release.
+  #
+  signAndEditExecutable: false
+
+# ============================================================
+# NSIS WINDOWS INSTALLER
+# ============================================================
 
 nsis:
+  # Show installation wizard.
   oneClick: false
+
+  # Install for current Windows user.
+  #
+  # Good for development and POS workstation deployment where
+  # machine-wide administrator installation is not required.
   perMachine: false
+
+  # Allow the user/technician to select installation directory.
   allowToChangeInstallationDirectory: true
+
+  # Create Windows desktop shortcut.
+  createDesktopShortcut: true
+
+  # Create Windows Start Menu shortcut.
+  createStartMenuShortcut: true
+
+  shortcutName: RX POS
+
+  # Keep local RX POS data when uninstalling.
+  #
+  # IMPORTANT for POS because local SQLite/store-node data may
+  # contain unsynchronized offline transactions.
+  deleteAppDataOnUninstall: false
+
+# ============================================================
+# MACOS
+# ============================================================
+#
+# x64:
+#
+#   Intel Macs
+#
+# arm64:
+#
+#   Apple Silicon
+#   M1
+#   M2
+#   M3
+#   M4
+#   M5 and future compatible Apple Silicon architectures
+#
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+
+  category: public.app-category.business
+
+  # ----------------------------------------------------------
+  # TEMPORARY DEVELOPMENT CONFIGURATION
+  # ----------------------------------------------------------
+  #
+  # Disable automatic identity discovery while testing.
+  #
+  # Remove before customer/production macOS release.
+  #
+  identity: null
+
+# ============================================================
+# MACOS DMG
+# ============================================================
+
+dmg:
+  title: RX POS
+
+  contents:
+    - x: 130
+      y: 220
+
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
