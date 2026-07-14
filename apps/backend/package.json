@@ -7,7 +7,7 @@
     "dev": "npm run build:shared && tsx watch src/server.ts",
     "build:shared": "npm --prefix ../../packages/shared run build",
     "prebuild": "npm run build:shared && npm run db:generate:sqlite",
-    "build": "tsc && tsc-alias",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "postbuild": "node scripts/copy-prisma-engines.mjs",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
