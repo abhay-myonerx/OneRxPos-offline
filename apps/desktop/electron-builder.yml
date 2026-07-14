@@ -25,12 +25,15 @@ files:
 # (scripts/harden-pack.mjs); asar integrity is embedded by electron-builder v25
 # automatically.
 #
-# EV code-signing is enabled by setting the standard:
-# WIN_CSC_LINK (path/URL to the .pfx)
+# TEMPORARILY DISABLED FOR LOCAL TESTING:
+#
+# EV code-signing is intentionally disabled for the current local test build.
+#
+# WIN_CSC_LINK
 # WIN_CSC_KEY_PASSWORD
 #
-# electron-builder reads and applies these natively.
-# Unset in dev/CI means an unsigned build.
+# Do not configure the certificate environment variables while testing.
+# Re-enable code signing before producing the customer/production release.
 #
 # Runtime Electron fuses are deferred to a later
 # verified-hardening pass.
