@@ -1,7 +1,9 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
+
 import { PrismaClient } from "@/generated/prisma/client";
+
 // The store-node sqlite client (prisma/schema.sqlite.prisma) is generated
 // from the SAME model set as the Postgres schema, just `provider = "sqlite"`
 // — its runtime model API (prisma.product.findMany(), $extends, etc.) is
@@ -10,8 +12,11 @@ import { PrismaClient } from "@/generated/prisma/client";
 // `createSqlitePrismaClient` below) so every caller of `prisma` keeps a
 // single type instead of a union threaded through the whole codebase.
 import { PrismaClient as SqlitePrismaClient } from "@/generated/prisma-sqlite/client";
+
+import { resolveRxPosDataPath } from "@/local/data-dir";
 import { buildSqliteAdapter } from "@/local/sqlcipher-adapter";
 import { deriveLocalDbKey } from "@/local/key-derivation";
+
 import { config } from "./index";
 
 // ─── Singleton Prisma Client ───────────────────────────────────────────────────
@@ -29,7 +34,9 @@ function createPostgresPrismaClient(): PrismaClient {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg({
+    connectionString,
+  });
 
   return new PrismaClient({
     adapter,
@@ -38,37 +45,82 @@ function createPostgresPrismaClient(): PrismaClient {
 }
 
 // Store-node local backend: a SQLCipher-encrypted SQLite file keyed from
-// LOCAL_DB_MASTER_KEY + SYNC_DEVICE_ID (src/local/key-derivation.ts), opened
-// via the same driver-adapter pattern as Postgres above (buildSqliteAdapter
-// from Task 1, passed straight to `new SqlitePrismaClient({ adapter })`).
+// LOCAL_DB_MASTER_KEY + SYNC_DEVICE_ID.
 //
-// Path source: `LOCAL_DB_PATH`, NOT `SQLITE_DATABASE_URL`. Both default to
-// the same physical file, but `SQLITE_DATABASE_URL` is consumed by Prisma's
-// own schema loader (prisma/schema.sqlite.prisma's `datasource url`), where
-// relative paths resolve against the schema file's directory (prisma/).
-// `buildSqliteAdapter` instead builds `"file:" + path` directly against a
-// raw filesystem path, so using `LOCAL_DB_PATH` (CWD-relative, already used
-// this way by `src/local/database.ts`) avoids a second, differently-rooted
-// notion of "relative" for the same setting.
+// Packaged Electron MUST use RX_POS_DATA_DIR.
+//
+// Example:
+//
+// C:\Users\<user>\AppData\Roaming\rx-pos-desktop\data\rx-pos.db
+//
+// Development and standalone backend execution can continue to use
+// LOCAL_DB_PATH.
+//
+// Mutable SQLite data must never be created under:
+//
+// C:\Program Files\RX POS\resources\backend
+function resolveSqliteDatabasePath(): string {
+  const electronDataDir = process.env.RX_POS_DATA_DIR?.trim();
+
+  if (electronDataDir) {
+    return resolveRxPosDataPath("rx-pos.db");
+  }
+
+  const configuredPath = config.LOCAL_DB_PATH?.trim();
+
+  if (configuredPath === ":memory:") {
+    return ":memory:";
+  }
+
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  return resolveRxPosDataPath("rx-pos.db");
+}
+
 function createSqlitePrismaClient(): PrismaClient {
   if (!config.LOCAL_DB_MASTER_KEY) {
     throw new Error(
-      "LOCAL_DB_MASTER_KEY environment variable is not set (required when DATA_BACKEND=sqlite)",
+      "LOCAL_DB_MASTER_KEY environment variable is not set " +
+        "(required when DATA_BACKEND=sqlite)",
+    );
+  }
+
+  if (!config.SYNC_DEVICE_ID) {
+    throw new Error(
+      "SYNC_DEVICE_ID environment variable is not set " + "(required when DATA_BACKEND=sqlite)",
     );
   }
 
   const key = deriveLocalDbKey(config.LOCAL_DB_MASTER_KEY, config.SYNC_DEVICE_ID);
-  const path = config.LOCAL_DB_PATH;
 
-  // better-sqlite3 does not create missing parent directories on open —
-  // mirrors the mkdirSync in src/local/database.ts#openLocalDb.
+  const path = resolveSqliteDatabasePath();
+
+  // better-sqlite3 does not create missing parent directories.
+  //
+  // In packaged Electron this directory must be under the current
+  // user's AppData directory, never Program Files.
   if (path !== ":memory:") {
-    mkdirSync(dirname(path), { recursive: true });
+    mkdirSync(dirname(path), {
+      recursive: true,
+    });
   }
 
-  const adapter = buildSqliteAdapter({ path, key });
+  // Safe diagnostic:
+  //
+  // The filesystem path may be logged.
+  // Never log LOCAL_DB_MASTER_KEY or the derived SQLCipher key.
+  console.log("[database] SQLite database path:", path);
 
-  return new SqlitePrismaClient({ adapter }) as unknown as PrismaClient;
+  const adapter = buildSqliteAdapter({
+    path,
+    key,
+  });
+
+  return new SqlitePrismaClient({
+    adapter,
+  }) as unknown as PrismaClient;
 }
 
 function createPrismaClient(): PrismaClient {
@@ -107,6 +159,7 @@ if (process.env.NODE_ENV !== "production") {
 /**
  * Models that carry a `tenantId` column and are scoped by direct equality.
  */
+
 // Intentionally NOT scoped here:
 //   • Tenant            — the tenant table itself (global, not tenant-owned).
 //   • MigrationAuditV1ToV2 — v1→v2 migration artifact with a NULLABLE tenant_id;
@@ -117,6 +170,7 @@ if (process.env.NODE_ENV !== "production") {
 //     (a tenant's Product.din soft-links into it). Because it carries no tenantId,
 //     the schema-coverage guard in tenant-scope.test.ts does not flag it, and it
 //     must NOT be added here — doing so would inject a non-existent tenantId filter.
+//
 // Exported so a regression test can assert every tenant-owned model is covered.
 export const DIRECT_TENANT_MODELS = new Set<string>([
   // ── POS / inventory / sales core ─────────────────────────────────────
@@ -154,24 +208,28 @@ export const DIRECT_TENANT_MODELS = new Set<string>([
   "StockTransfer",
   "ReceiptTemplate",
   "InvoiceSequence",
+
   // ── HRM: core ────────────────────────────────────────────────────────
   "Employee",
   "Department",
   "Designation",
   "EmployeeDocument",
   "EmploymentContract",
+
   // ── HRM: attendance & shifts ─────────────────────────────────────────
   "AttendanceRecord",
   "AttendanceCorrection",
   "WorkShift",
   "ShiftSchedule",
   "ShiftSwapRequest",
+
   // ── HRM: leave & holidays ────────────────────────────────────────────
   "LeaveType",
   "LeavePolicy",
   "LeaveBalance",
   "LeaveRequest",
   "Holiday",
+
   // ── HRM: payroll ─────────────────────────────────────────────────────
   "SalaryStructure",
   "SalaryComponent",
@@ -180,11 +238,14 @@ export const DIRECT_TENANT_MODELS = new Set<string>([
   "Payslip",
   "PayslipLine",
   "SalaryAdvance",
+
   // ── Licensing (Phase 0.5) ────────────────────────────────────────────
   "License",
+
   // ── Pharmacy (Phase 2.2) — Rx-at-till link (PII-free) ────────────────
   "RxLink",
-  // ── Pharmacy (Phase 2.4) — controlled-substances / narcotic log (PII-free)
+
+  // ── Pharmacy (Phase 2.4) — controlled-substances / narcotic log ──────
   "NarcoticEvent",
 ]);
 
@@ -238,9 +299,12 @@ export function createTenantClient(tenantId: string) {
 
   return prisma.$extends({
     name: "tenant-scope",
+
     query: {
       $allOperations({ model, operation, args, query }) {
-        if (!model) return query(args);
+        if (!model) {
+          return query(args);
+        }
 
         // ── Direct tenant-scoped models ──────────────────────────────
         if (DIRECT_TENANT_MODELS.has(model)) {
@@ -249,6 +313,7 @@ export function createTenantClient(tenantId: string) {
 
         // ── Child models scoped via parent relation ──────────────────
         const parentRelation = CHILD_MODEL_PARENT_RELATION[model];
+
         if (parentRelation) {
           return query(scopeViaParent(tenantId, parentRelation, operation, args));
         }
@@ -274,7 +339,10 @@ export function scopeDirect(
   args: unknown,
 ): Record<string, unknown> {
   const a = (args ?? {}) as Record<string, unknown>;
-  const next: Record<string, unknown> = { ...a };
+
+  const next: Record<string, unknown> = {
+    ...a,
+  };
 
   if (READ_OPERATIONS.has(operation) || MUTATE_OPERATIONS.has(operation)) {
     // Force tenantId to our tenant — any caller-supplied tenantId is
@@ -303,9 +371,17 @@ export function scopeDirect(
     // upsert has both `create` and `update` payloads, plus `where`.
     // `where` is already handled above; inject into create/update too.
     const create = (a.create as Record<string, unknown> | undefined) ?? {};
+
     const update = (a.update as Record<string, unknown> | undefined) ?? {};
-    next.create = { ...create, tenantId };
-    next.update = { ...update };
+
+    next.create = {
+      ...create,
+      tenantId,
+    };
+
+    next.update = {
+      ...update,
+    };
   }
 
   return next;
@@ -337,13 +413,16 @@ export function scopeViaParent(
   }
 
   const existingWhere = (a.where as Record<string, unknown> | undefined) ?? {};
+
   const existingParentFilter =
     (existingWhere[relation] as Record<string, unknown> | undefined) ?? {};
 
   return {
     ...a,
+
     where: {
       ...existingWhere,
+
       [relation]: {
         ...existingParentFilter,
         tenantId,

@@ -30,6 +30,11 @@ import {
   type StoreNodeSecrets,
 } from "./store-node-config";
 
+import {
+  ensureStoreNodeRuntimeDirectories,
+  resolveStoreNodeRuntimePaths,
+} from "./runtime-paths";
+
 export interface StoreNodeHandle {
   port: number;
   stop: () => Promise<void>;
@@ -120,10 +125,12 @@ function getFreePort(): Promise<number> {
     srv.on("error", reject);
     srv.listen(0, "127.0.0.1", () => {
       const address = srv.address();
-      const port = typeof address === "object" && address ? address.port : undefined;
+      const port =
+        typeof address === "object" && address ? address.port : undefined;
       srv.close(() => {
         if (port) resolve(port);
-        else reject(new Error("startStoreNode: failed to determine a free port"));
+        else
+          reject(new Error("startStoreNode: failed to determine a free port"));
       });
     });
   });
@@ -138,7 +145,9 @@ function sleep(ms: number): Promise<void> {
 // on this path so `ensureStoreNodeReady` checks/creates the exact file the
 // spawned server then opens). Exported so main.ts never re-derives it ad hoc.
 export function storeNodeDbPath(userDataDir: string): string {
-  return path.join(userDataDir, "store-node.db");
+  const runtimePaths = resolveStoreNodeRuntimePaths(userDataDir);
+  ensureStoreNodeRuntimeDirectories(runtimePaths);
+  return runtimePaths.dbPath;
 }
 
 async function waitForHealth(opts: {
@@ -156,7 +165,9 @@ async function waitForHealth(opts: {
     if (opts.isExited()) {
       throw (
         opts.getExitError() ??
-        new Error("startStoreNode: backend process exited before becoming healthy")
+        new Error(
+          "startStoreNode: backend process exited before becoming healthy",
+        )
       );
     }
     try {
@@ -185,7 +196,9 @@ function killChild(child: ChildProcess): Promise<void> {
     // `prefer-const` — a fake/synchronous child in tests can emit "exit"
     // from inside kill() itself, so `onExit` must not reference the timer
     // before it's assigned (a TDZ bug if declared with `const` after).
-    const forceTimer: { handle: NodeJS.Timeout | undefined } = { handle: undefined };
+    const forceTimer: { handle: NodeJS.Timeout | undefined } = {
+      handle: undefined,
+    };
     const onExit = (): void => {
       if (forceTimer.handle) clearTimeout(forceTimer.handle);
       resolve();
@@ -258,14 +271,24 @@ export async function startStoreNode(
   const getFreePortFn = opts.getFreePortFn ?? getFreePort;
   const getSecretsFn = opts.getSecretsFn ?? loadOrCreateStoreNodeSecrets;
   const healthTimeoutMs = opts.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS;
-  const healthPollIntervalMs = opts.healthPollIntervalMs ?? DEFAULT_HEALTH_POLL_INTERVAL_MS;
+  const healthPollIntervalMs =
+    opts.healthPollIntervalMs ?? DEFAULT_HEALTH_POLL_INTERVAL_MS;
   const onLog = opts.onLog ?? (() => {});
   const baseEnv = opts.env ?? process.env;
 
   const backendCwd = opts.backendCwd ?? defaultBackendDir();
-  const backendEntry = opts.backendEntry ?? path.join(backendCwd, "dist", "server.js");
-  const userDataDir = opts.userDataDir ?? path.join(os.tmpdir(), "rxpos-store-node");
+
+  const backendEntry =
+    opts.backendEntry ?? path.join(backendCwd, "dist", "server.js");
+
+  const userDataDir =
+    opts.userDataDir ?? path.join(os.tmpdir(), "rxpos-store-node");
+
   const electronPath = opts.electronPath ?? process.execPath;
+
+  const runtimePaths = resolveStoreNodeRuntimePaths(userDataDir);
+
+  ensureStoreNodeRuntimeDirectories(runtimePaths);
 
   if (!existsFn(backendEntry)) {
     throw new Error(
@@ -279,25 +302,33 @@ export async function startStoreNode(
 
   const env: NodeJS.ProcessEnv = {
     ...baseEnv,
+
     ELECTRON_RUN_AS_NODE: "1",
+
     DATA_BACKEND: "sqlite",
-    LOCAL_DB_PATH: storeNodeDbPath(userDataDir),
+
+    LOCAL_DB_PATH: runtimePaths.dbPath,
+
     PORT: String(port),
+
     NODE_ENV: "production",
+
     JWT_ACCESS_SECRET: secrets.JWT_ACCESS_SECRET,
+
     JWT_REFRESH_SECRET: secrets.JWT_REFRESH_SECRET,
+
     SYNC_TOKEN_SECRET: secrets.SYNC_TOKEN_SECRET,
+
     LICENSE_TOKEN_SECRET: secrets.LICENSE_TOKEN_SECRET,
+
     PIN_PEPPER_SECRET: secrets.PIN_PEPPER_SECRET,
+
     POS_OVERRIDE_SECRET: secrets.POS_OVERRIDE_SECRET,
+
     LOCAL_DB_MASTER_KEY: secrets.LOCAL_DB_MASTER_KEY,
-    // Explicit, not relied-on-as-default: must match the deviceId
-    // onboarding.ts used to derive the SQLCipher key BEFORE this server ever
-    // boots (see STORE_NODE_DEVICE_ID's doc comment in store-node-config.ts).
+
     SYNC_DEVICE_ID: STORE_NODE_DEVICE_ID,
-    // Unlocks POST /api/v1/setup/complete (see StoreNodeSecrets.SETUP_ACCESS_CODE
-    // doc comment) — without this the backend's own first-run setup refuses
-    // every request with "Initial setup is locked".
+
     SETUP_ACCESS_CODE: secrets.SETUP_ACCESS_CODE,
   };
 
@@ -319,7 +350,9 @@ export async function startStoreNode(
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  child.stdout?.on("data", (chunk: Buffer) => onLog(`[store-node] ${chunk.toString().trimEnd()}`));
+  child.stdout?.on("data", (chunk: Buffer) =>
+    onLog(`[store-node] ${chunk.toString().trimEnd()}`),
+  );
   child.stderr?.on("data", (chunk: Buffer) =>
     onLog(`[store-node:err] ${chunk.toString().trimEnd()}`),
   );

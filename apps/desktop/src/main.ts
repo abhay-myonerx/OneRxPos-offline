@@ -1,5 +1,5 @@
 import path from "node:path";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { app, BrowserWindow, dialog, protocol } from "electron";
 import { privilegedSchemes, registerAppProtocol } from "./config/app-protocol";
 import { buildWindowOptions } from "./config/window-options";
@@ -24,6 +24,11 @@ import {
 } from "./store-node/onboarding";
 import { resolveStoreNodeResourcePaths } from "./store-node/resource-paths";
 import { loadOrCreateStoreNodeSecrets } from "./store-node/store-node-config";
+import {
+  ensureStoreNodeRuntimeDirectories,
+  resolveStoreNodeRuntimePaths,
+} from "./store-node/runtime-paths";
+import { migrateLegacyStoreNodeDatabase } from "./store-node/runtime-migration";
 
 // Must run before app is ready.
 protocol.registerSchemesAsPrivileged(privilegedSchemes());
@@ -75,34 +80,52 @@ function createWindow(apiOrigin: string): BrowserWindow {
 const storeNodeLogTail: string[] = [];
 const STORE_NODE_LOG_TAIL_MAX = 200;
 
-function makeStoreNodeLogger(userDataDir: string): {
+function makeStoreNodeLogger(logsDir: string): {
   log: (line: string) => void;
   logPath: string;
 } {
-  const logPath = path.join(userDataDir, "store-node-boot.log");
-  // Truncate at each app launch so the file reflects the current attempt (the
-  // crash-loop guard relaunches a fresh process, which re-truncates) rather
-  // than growing without bound across every run.
+  mkdirSync(logsDir, {
+    recursive: true,
+  });
+
+  const logPath = path.join(logsDir, "store-node-boot.log");
+
+  storeNodeLogTail.length = 0;
+
   try {
     writeFileSync(
       logPath,
       `=== store-node boot log — ${new Date().toISOString()} ===\n`,
+      {
+        encoding: "utf8",
+      },
     );
   } catch {
-    // best-effort — never let logging setup break boot
+    // Logging must never block application startup.
   }
+
   const log = (line: string): void => {
     storeNodeLogTail.push(line);
-    if (storeNodeLogTail.length > STORE_NODE_LOG_TAIL_MAX)
+
+    if (storeNodeLogTail.length > STORE_NODE_LOG_TAIL_MAX) {
       storeNodeLogTail.shift();
+    }
+
     console.log(line);
+
     try {
-      appendFileSync(logPath, line + "\n");
+      appendFileSync(logPath, `${line}\n`, {
+        encoding: "utf8",
+      });
     } catch {
-      // best-effort — a logging failure must never abort backend startup
+      // Logging failure must never abort backend startup.
     }
   };
-  return { log, logPath };
+
+  return {
+    log,
+    logPath,
+  };
 }
 
 // Never leave the user staring at a blank window: if the store-node backend
@@ -173,9 +196,18 @@ app.whenReady().then(async () => {
     resourcesPath: process.resourcesPath,
   });
   const backendDir = resourcePaths.backendDir;
+
   const userDataDir = app.getPath("userData");
-  const { log: logStoreNode, logPath: storeNodeLogPath } =
-    makeStoreNodeLogger(userDataDir);
+
+  const runtimePaths = resolveStoreNodeRuntimePaths(userDataDir);
+
+  ensureStoreNodeRuntimeDirectories(runtimePaths);
+
+  migrateLegacyStoreNodeDatabase(userDataDir, runtimePaths);
+
+  const { log: logStoreNode, logPath: storeNodeLogPath } = makeStoreNodeLogger(
+    runtimePaths.logsDir,
+  );
   // WATCH-SN4-1 (see scripts/rebuild-native-backend.mjs): a private,
   // Electron-targeted copy of better-sqlite3-multiple-ciphers, redirected to
   // via a --require hook — see StartStoreNodeOptions.electronNativeOverride.
@@ -200,7 +232,7 @@ app.whenReady().then(async () => {
     // file already exists by then).
     const secrets = loadOrCreateStoreNodeSecrets(userDataDir);
     setupAccessCode = secrets.SETUP_ACCESS_CODE;
-    const dbPath = storeNodeDbPath(userDataDir);
+    const dbPath = runtimePaths.dbPath;
     const key = deriveStoreNodeDbKey({
       backendDir,
       masterKey: secrets.LOCAL_DB_MASTER_KEY,
