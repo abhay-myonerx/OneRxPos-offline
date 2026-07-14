@@ -59,8 +59,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(__dirname, "..");
-const backendDir = path.resolve(desktopDir, "..", "rx-pos-backend");
-const sharedDir = path.resolve(desktopDir, "..", "rx-pos-shared");
+const backendDir = path.resolve(desktopDir, "..", "backend");
+const sharedDir = path.resolve(desktopDir, "..", "..", "packages", "shared");
 const stagingDir = path.join(desktopDir, ".staging", "backend");
 const prodBuildDir = path.join(desktopDir, ".staging", "_prod-build");
 const prodBackendDir = path.join(prodBuildDir, "backend");
