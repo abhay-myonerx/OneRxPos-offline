@@ -43,4 +43,12 @@ release/
 .cache/
 
 # Archives
-zip
+zip/
+*.zip
+
+# Generated files
+generated/
+generate/
+generated-files/
+.generated.
+.gen.
