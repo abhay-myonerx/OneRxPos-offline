@@ -1,64 +1,364 @@
 "use strict";
-// SN-4 Task 3: one-shot child process that pushes the store-node SQLite
-// schema (rx-pos-backend/src/local/sqlite-push.ts's pushSqliteSchema) into a
-// FRESH encrypted DB file, then exits. Spawned by
-// src/store-node/onboarding.ts under Electron-as-node — same
-// `--require electron-native-require-hook.cjs` convention launcher.ts uses,
-// because this script also transitively requires
-// "better-sqlite3-multiple-ciphers" (via the backend's sqlcipher-adapter),
-// and the backend's OWN node_modules copy of that module is built for plain
-// Node, not the Electron ABI this child runs under.
-//
-// Inputs come from env vars, NOT argv, so the raw SQLCipher key never shows
-// up in a process listing (Task Manager / `ps` / argv-based log scraping):
-//   RXPOS_PUSH_BACKEND_DIR — rx-pos-backend repo root (its dist/local/
-//     sqlite-push.js is required from here; pushSqliteSchema itself shells
-//     out to `npx prisma migrate diff` relative to that root).
-//   RXPOS_PUSH_DB_PATH     — target encrypted DB file (must not exist yet;
-//     pushSqliteSchema's DDL is plain CREATE TABLE, not IF NOT EXISTS).
-//   RXPOS_PUSH_DB_KEY_HEX  — the derived SQLCipher key, hex-encoded.
-//
-// Does NOT seed an admin/tenant — the schema is pushed empty. The existing
-// backend /api/v1/setup/status + /setup/complete endpoints (consumed by the
-// existing frontend Setup wizard) are how the real admin/tenant get created,
-// entirely offline, on first launch.
-// This file IS a CJS one-shot script by construction (see file header) —
-// requires must load synchronously via require(), same convention as
-// electron-native-require-hook.cjs.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
+/**
+ * SN-4 Task 3:
+ *
+ * One-shot child process that pushes the store-node SQLite schema into a
+ * fresh encrypted database.
+ *
+ * Spawned by:
+ *
+ *   apps/desktop/src/store-node/onboarding.ts
+ *
+ * under Electron-as-Node.
+ *
+ * IMPORTANT:
+ *
+ * Backend modules may initialize config / Prisma during require().
+ *
+ * Therefore DATA_BACKEND and LOCAL_DB_PATH MUST be configured BEFORE
+ * requiring:
+ *
+ *   dist/local/sqlite-push.js
+ *
+ * Otherwise the backend can resolve its default relative SQLite path
+ * against:
+ *
+ *   C:\Program Files\RX POS\resources\backend
+ *
+ * and attempt to create:
+ *
+ *   C:\Program Files\RX POS\resources\backend\data
+ *
+ * Normal installed users cannot write there and Windows returns EPERM.
+ *
+ * Inputs are provided through environment variables instead of argv so
+ * the raw SQLCipher key does not appear in the process command line.
+ *
+ * Required environment variables:
+ *
+ *   RXPOS_PUSH_BACKEND_DIR
+ *     Packaged backend root.
+ *
+ *   RXPOS_PUSH_DB_PATH
+ *     Absolute writable SQLite database path.
+ *
+ *   RXPOS_PUSH_DB_KEY_HEX
+ *     Derived SQLCipher key encoded as hexadecimal.
+ */
+
+const fs = require("node:fs");
 const path = require("node:path");
 
-const backendDir = process.env.RXPOS_PUSH_BACKEND_DIR;
-const dbPath = process.env.RXPOS_PUSH_DB_PATH;
-const keyHex = process.env.RXPOS_PUSH_DB_KEY_HEX;
-
-if (!backendDir || !dbPath || !keyHex) {
+function fail(message, err) {
   console.error(
-    "push-sqlite-schema-oneshot: RXPOS_PUSH_BACKEND_DIR, RXPOS_PUSH_DB_PATH and " +
-      "RXPOS_PUSH_DB_KEY_HEX are all required",
+    `[schema-push:err] ${message}`,
   );
+
+  if (err) {
+    console.error(
+      err instanceof Error
+        ? err.stack || err.message
+        : err,
+    );
+  }
+
   process.exit(1);
 }
 
-let pushSqliteSchema;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ({ pushSqliteSchema } = require(path.join(backendDir, "dist", "local", "sqlite-push.js")));
-} catch (err) {
-  console.error(
-    "push-sqlite-schema-oneshot: failed to load pushSqliteSchema from " +
-      `${backendDir}/dist/local/sqlite-push.js — was the backend built ` +
-      "(cd rx-pos-backend && npm run build)?",
-    err,
-  );
-  process.exit(1);
+function requireEnv(name) {
+  const value = process.env[name];
+
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0
+  ) {
+    throw new Error(
+      `push-sqlite-schema-oneshot: ${name} is required`,
+    );
+  }
+
+  return value.trim();
 }
 
-pushSqliteSchema({ path: dbPath, key: Buffer.from(keyHex, "hex") })
-  .then(() => {
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("push-sqlite-schema-oneshot: pushSqliteSchema failed:", err);
-    process.exit(1);
-  });
+async function main() {
+  let backendDir;
+  let dbPath;
+  let keyHex;
+
+  try {
+    backendDir = path.resolve(
+      requireEnv("RXPOS_PUSH_BACKEND_DIR"),
+    );
+
+    dbPath = requireEnv(
+      "RXPOS_PUSH_DB_PATH",
+    );
+
+    keyHex = requireEnv(
+      "RXPOS_PUSH_DB_KEY_HEX",
+    );
+  } catch (err) {
+    fail(
+      "invalid or missing environment configuration",
+      err,
+    );
+
+    return;
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * VALIDATE DATABASE PATH
+   * ----------------------------------------------------------
+   */
+
+  if (!path.isAbsolute(dbPath)) {
+    fail(
+      [
+        "RXPOS_PUSH_DB_PATH must be an absolute path.",
+        `Received: ${dbPath}`,
+        `cwd: ${process.cwd()}`,
+      ].join(" "),
+    );
+
+    return;
+  }
+
+  dbPath = path.normalize(dbPath);
+
+  const dbDir = path.dirname(dbPath);
+
+  /*
+   * ----------------------------------------------------------
+   * SECURITY: VALIDATE SQLCIPHER KEY
+   * ----------------------------------------------------------
+   */
+
+  if (!/^[0-9a-fA-F]+$/.test(keyHex)) {
+    fail(
+      "RXPOS_PUSH_DB_KEY_HEX must contain hexadecimal characters only",
+    );
+
+    return;
+  }
+
+  if (keyHex.length % 2 !== 0) {
+    fail(
+      "RXPOS_PUSH_DB_KEY_HEX has an invalid hexadecimal length",
+    );
+
+    return;
+  }
+
+  const dbKey = Buffer.from(
+    keyHex,
+    "hex",
+  );
+
+  if (dbKey.length !== 32) {
+    fail(
+      `RXPOS_PUSH_DB_KEY_HEX must decode to 32 bytes; received ${dbKey.length}`,
+    );
+
+    return;
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * CREATE WRITABLE DATABASE DIRECTORY
+   * ----------------------------------------------------------
+   *
+   * This directory should normally be:
+   *
+   * %APPDATA%
+   *   \rx-pos-desktop
+   *   \store-node
+   *   \data
+   *
+   * Never Program Files.
+   */
+
+  try {
+    fs.mkdirSync(
+      dbDir,
+      {
+        recursive: true,
+      },
+    );
+  } catch (err) {
+    fail(
+      `could not create SQLite data directory: ${dbDir}`,
+      err,
+    );
+
+    return;
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * CRITICAL FIX
+   * ----------------------------------------------------------
+   *
+   * Set backend runtime configuration BEFORE require().
+   *
+   * dist/local/sqlite-push.js can transitively load:
+   *
+   *   config/database.js
+   *
+   * database.js may initialize Prisma immediately.
+   *
+   * Without LOCAL_DB_PATH here, backend config can fall back to:
+   *
+   *   ./data
+   *
+   * Since the schema-push cwd is the packaged backend directory,
+   * that becomes:
+   *
+   *   C:\Program Files\RX POS\resources\backend\data
+   *
+   * and Windows returns EPERM.
+   */
+
+  process.env.DATA_BACKEND = "sqlite";
+
+  process.env.LOCAL_DB_PATH = dbPath;
+
+  /*
+   * Keep the push-specific values normalized as well.
+   */
+
+  process.env.RXPOS_PUSH_BACKEND_DIR =
+    backendDir;
+
+  process.env.RXPOS_PUSH_DB_PATH =
+    dbPath;
+
+  /*
+   * Do not log:
+   *
+   * RXPOS_PUSH_DB_KEY_HEX
+   * LOCAL_DB_MASTER_KEY
+   * JWT secrets
+   * setup access code
+   */
+
+  console.log(
+    `[schema-push] backendDir=${backendDir}`,
+  );
+
+  console.log(
+    `[schema-push] dbPath=${dbPath}`,
+  );
+
+  console.log(
+    `[schema-push] dbDir=${dbDir}`,
+  );
+
+  console.log(
+    `[schema-push] dbPathAbsolute=${path.isAbsolute(dbPath)}`,
+  );
+
+  /*
+   * ----------------------------------------------------------
+   * LOAD BACKEND SCHEMA PUSH
+   * ----------------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * This require MUST remain after:
+   *
+   *   process.env.DATA_BACKEND = "sqlite"
+   *   process.env.LOCAL_DB_PATH = dbPath
+   */
+
+  const sqlitePushPath = path.join(
+    backendDir,
+    "dist",
+    "local",
+    "sqlite-push.js",
+  );
+
+  if (!fs.existsSync(sqlitePushPath)) {
+    fail(
+      [
+        "pushSqliteSchema module does not exist.",
+        `Expected: ${sqlitePushPath}`,
+        "Was the backend built before desktop packaging?",
+      ].join(" "),
+    );
+
+    return;
+  }
+
+  let pushSqliteSchema;
+
+  try {
+    const sqlitePushModule = require(
+      sqlitePushPath,
+    );
+
+    pushSqliteSchema =
+      sqlitePushModule.pushSqliteSchema;
+  } catch (err) {
+    fail(
+      [
+        "failed to load pushSqliteSchema from",
+        sqlitePushPath,
+        "Was the backend built before desktop packaging?",
+      ].join(" "),
+      err,
+    );
+
+    return;
+  }
+
+  if (
+    typeof pushSqliteSchema !== "function"
+  ) {
+    fail(
+      `pushSqliteSchema export was not found in ${sqlitePushPath}`,
+    );
+
+    return;
+  }
+
+  /*
+   * ----------------------------------------------------------
+   * PUSH SQLITE SCHEMA
+   * ----------------------------------------------------------
+   */
+
+  try {
+    await pushSqliteSchema({
+      path: dbPath,
+      key: dbKey,
+    });
+
+    console.log(
+      "[schema-push] SQLite schema push completed successfully",
+    );
+  } catch (err) {
+    fail(
+      "pushSqliteSchema failed",
+      err,
+    );
+
+    return;
+  } finally {
+    /*
+     * Best-effort removal of key material from this script's references.
+     *
+     * Environment cleanup happens before normal process exit as well.
+     */
+
+    dbKey.fill(0);
+
+    delete process.env
+      .RXPOS_PUSH_DB_KEY_HEX;
+  }
+
+  process.exit(0);
+}
+
+void main();
