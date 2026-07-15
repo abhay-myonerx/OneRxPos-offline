@@ -34,37 +34,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { signingBanner } from "./signing-status.mjs";
 
-const __dirname = path.dirname(
-  fileURLToPath(import.meta.url),
-);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const desktopDir = path.resolve(__dirname, "..");
 
-const frontendDir = path.resolve(
-  desktopDir,
-  "..",
-  "frontend",
-);
+const frontendDir = path.resolve(desktopDir, "..", "frontend");
 
-const distDesktopDir = path.resolve(
-  desktopDir,
-  "dist-desktop",
-);
+const distDesktopDir = path.resolve(desktopDir, "dist-desktop");
 
 const dirTarget = process.argv.includes("--dir");
 
-const npmCmd =
-  process.platform === "win32"
-    ? "npm.cmd"
-    : "npm";
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 
 /**
  * Execute an npm command in a specific working directory.
  */
 function run(cwd, args) {
-  console.log(
-    `\n> (${cwd}) ${npmCmd} ${args.join(" ")}`,
-  );
+  console.log(`\n> (${cwd}) ${npmCmd} ${args.join(" ")}`);
 
   // shell:true is required on Windows.
   //
@@ -80,10 +66,7 @@ function run(cwd, args) {
   });
 
   if (result.error) {
-    console.error(
-      "\nBuild command failed to start:",
-      result.error,
-    );
+    console.error("\nBuild command failed to start:", result.error);
 
     process.exit(1);
   }
@@ -111,32 +94,17 @@ function stopPreviousWindowsApp() {
     return;
   }
 
-  console.log(
-    "\n> Checking for a running RX POS development process...",
-  );
+  console.log("\n> Checking for a running RX POS development process...");
 
-  const result = spawnSync(
-    "taskkill",
-    [
-      "/F",
-      "/IM",
-      "RX POS.exe",
-      "/T",
-    ],
-    {
-      stdio: "ignore",
-      shell: true,
-    },
-  );
+  const result = spawnSync("taskkill", ["/F", "/IM", "RX POS.exe", "/T"], {
+    stdio: "ignore",
+    shell: true,
+  });
 
   if (result.status === 0) {
-    console.log(
-      "> Previous RX POS process stopped.",
-    );
+    console.log("> Previous RX POS process stopped.");
   } else {
-    console.log(
-      "> No running RX POS process found.",
-    );
+    console.log("> No running RX POS process found.");
   }
 }
 
@@ -150,21 +118,14 @@ function sleep(milliseconds) {
   const sharedBuffer = new SharedArrayBuffer(4);
   const sharedArray = new Int32Array(sharedBuffer);
 
-  Atomics.wait(
-    sharedArray,
-    0,
-    0,
-    milliseconds,
-  );
+  Atomics.wait(sharedArray, 0, 0, milliseconds);
 }
 
 /**
  * Remove previous electron-builder output.
  */
 function cleanPreviousBuild() {
-  console.log(
-    `\n> Cleaning previous Electron build output: ${distDesktopDir}`,
-  );
+  console.log(`\n> Cleaning previous Electron build output: ${distDesktopDir}`);
 
   if (process.platform === "win32") {
     stopPreviousWindowsApp();
@@ -181,22 +142,16 @@ function cleanPreviousBuild() {
       retryDelay: 1000,
     });
 
-    console.log(
-      "> Previous Electron build output cleaned.",
-    );
+    console.log("> Previous Electron build output cleaned.");
   } catch (error) {
-    console.error(
-      "\nUnable to clean the previous Electron build output.",
-    );
+    console.error("\nUnable to clean the previous Electron build output.");
 
     if (process.platform === "win32") {
       console.error(
         "Close RX POS and verify no RX POS.exe process is running.",
       );
 
-      console.error(
-        "Then run the build again.",
-      );
+      console.error("Then run the build again.");
     }
 
     console.error(error);
@@ -209,19 +164,13 @@ function cleanPreviousBuild() {
 // STEP 1 — BUILD FRONTEND SPA
 // ============================================================
 
-run(frontendDir, [
-  "run",
-  "build:spa",
-]);
+run(frontendDir, ["run", "build:electron"]);
 
 // ============================================================
 // STEP 2 — BUILD ELECTRON MAIN + PRELOAD
 // ============================================================
 
-run(desktopDir, [
-  "run",
-  "build",
-]);
+run(desktopDir, ["run", "build"]);
 
 // ============================================================
 // STEP 3 — PREPARE STORE-NODE BACKEND
@@ -241,10 +190,7 @@ run(desktopDir, [
 // The log shows the staged backend and production-only dependency
 // closure were created successfully.
 
-run(desktopDir, [
-  "run",
-  "prepare:backend-resources",
-]);
+run(desktopDir, ["run", "prepare:backend-resources"]);
 
 // ============================================================
 // STEP 4 — CLEAN PREVIOUS ELECTRON OUTPUT
@@ -266,9 +212,7 @@ cleanPreviousBuild();
 // STEP 5 — SIGNING STATUS
 // ============================================================
 
-console.log(
-  signingBanner(process.env),
-);
+console.log(signingBanner(process.env));
 
 // ============================================================
 // STEP 6 — PACKAGE ELECTRON APPLICATION

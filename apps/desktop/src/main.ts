@@ -1,173 +1,134 @@
 import path from "node:path";
-import {
-  appendFileSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
+  ipcMain,
   protocol,
 } from "electron";
-
-import {
-  privilegedSchemes,
-  registerAppProtocol,
-} from "./config/app-protocol";
-
-import {
-  buildWindowOptions,
-} from "./config/window-options";
-
-import {
-  resolveEntry,
-  bundleDir,
-} from "./config/urls";
-
-import {
-  applyHardening,
-} from "./security/harden";
-
-import {
-  resolveKiosk,
-} from "./security/kiosk";
-
-import {
-  recordCrashAndShouldRelaunch,
-} from "./security/crash-history";
-
-import {
-  keyFromEnv,
-} from "./security/renderer-crypto";
-
+import { privilegedSchemes, registerAppProtocol } from "./config/app-protocol";
+import { buildWindowOptions } from "./config/window-options";
+import { resolveEntry, bundleDir } from "./config/urls";
+import { applyHardening } from "./security/harden";
+import { resolveKiosk } from "./security/kiosk";
+import { recordCrashAndShouldRelaunch } from "./security/crash-history";
+import { keyFromEnv } from "./security/renderer-crypto";
 import {
   verifyBundleIntegrity,
   bundleIsEncrypted,
 } from "./security/verify-bundle";
-
-import {
-  getDeviceFingerprint,
-} from "./security/device-fingerprint";
-
+import { performCloudRequest } from "./cloud-auth/cloud-request";
+import { getDeviceFingerprint } from "./security/device-fingerprint";
 import {
   startStoreNode,
   storeNodeDbPath,
   type StoreNodeHandle,
 } from "./store-node/launcher";
-
 import {
   deriveStoreNodeDbKey,
   ensureStoreNodeReady,
 } from "./store-node/onboarding";
-
-import {
-  resolveStoreNodeResourcePaths,
-} from "./store-node/resource-paths";
-
-import {
-  loadOrCreateStoreNodeSecrets,
-} from "./store-node/store-node-config";
+import { resolveStoreNodeResourcePaths } from "./store-node/resource-paths";
+import { loadOrCreateStoreNodeSecrets } from "./store-node/store-node-config";
 
 // Must run before Electron app ready.
-protocol.registerSchemesAsPrivileged(
-  privilegedSchemes(),
-);
+protocol.registerSchemesAsPrivileged(privilegedSchemes());
 
-const {
-  kiosk: isKiosk,
-} = resolveKiosk(
-  process.env,
-);
+const { kiosk: isKiosk } = resolveKiosk(process.env);
 
-process.env.RXPOS_APP_VERSION =
-  app.getVersion();
+process.env.RXPOS_APP_VERSION = app.getVersion();
 
-let stopStoreNode:
-  | (() => Promise<void>)
-  | undefined;
+/**
+ * TEMPORARY:
+ *
+ * Enable DevTools in packaged EXE while testing
+ * RXAdmin / RX Connect cloud authentication.
+ *
+ * MUST be false before production release.
+ */
+const enableTestDevTools = true;
 
-let killStoreNodeNow:
-  | (() => void)
-  | undefined;
+let stopStoreNode: (() => Promise<void>) | undefined;
 
-function createWindow(
-  apiOrigin: string,
-): BrowserWindow {
-  const preloadPath =
-    path.join(
-      __dirname,
-      "preload.cjs",
-    );
+let killStoreNodeNow: (() => void) | undefined;
 
-  const win =
-    new BrowserWindow(
-      buildWindowOptions({
-        preloadPath,
-        kiosk: isKiosk,
-      }),
-    );
+function registerCloudAuthIpc(): void {
+  ipcMain.removeHandler("cloud-auth:request");
 
-  win.once(
-    "ready-to-show",
-    () => win.show(),
-  );
+  ipcMain.handle("cloud-auth:request", async (_event, payload) => {
+    return performCloudRequest(payload);
+  });
+}
 
+function createWindow(apiOrigin: string): BrowserWindow {
+  const preloadPath = path.join(__dirname, "preload.cjs");
+
+  const windowOptions = buildWindowOptions({
+    preloadPath,
+    kiosk: isKiosk,
+  });
+
+  /**
+   * TEMPORARY:
+   *
+   * Allow DevTools in packaged EXE while
+   * testing RXAdmin cloud authentication.
+   */
+  if (enableTestDevTools) {
+    windowOptions.webPreferences = {
+      ...windowOptions.webPreferences,
+
+      devTools: true,
+    };
+  }
+
+  const win = new BrowserWindow(windowOptions);
+
+  win.once("ready-to-show", () => win.show());
+
+  /**
+   * Keep existing Electron hardening.
+   *
+   * We do NOT remove security hardening.
+   */
   applyHardening(win, {
-    dev: !app.isPackaged,
+    dev: !app.isPackaged || enableTestDevTools,
+
     apiOrigin,
   });
 
-  const entry =
-    resolveEntry({
-      isPackaged:
-        app.isPackaged,
+  const entry = resolveEntry({
+    isPackaged: app.isPackaged,
 
-      devServerUrl:
-        process.env
-          .RXPOS_DEV_SERVER ??
-        "http://localhost:3000",
-    });
+    devServerUrl: process.env.RXPOS_DEV_SERVER ?? "http://localhost:3000",
+  });
 
-  console.log(
-    "==================================",
-  );
+  console.log("==================================");
 
-  console.log(
-    "Electron Entry:",
-    entry,
-  );
+  console.log("Electron Entry:", entry);
 
-  console.log(
-    "Electron URL :",
-    entry.url,
-  );
+  console.log("Electron URL :", entry.url);
 
-  console.log(
-    "==================================",
-  );
+  console.log("Test DevTools:", enableTestDevTools);
+
+  console.log("==================================");
 
   win.loadURL(entry.url);
 
   return win;
 }
 
-const storeNodeLogTail:
-  string[] = [];
+const storeNodeLogTail: string[] = [];
 
-const STORE_NODE_LOG_TAIL_MAX =
-  200;
+const STORE_NODE_LOG_TAIL_MAX = 200;
 
-function makeStoreNodeLogger(
-  userDataDir: string,
-): {
+function makeStoreNodeLogger(userDataDir: string): {
   log: (line: string) => void;
   logPath: string;
 } {
-  const logPath =
-    path.join(
-      userDataDir,
-      "store-node-boot.log",
-    );
+  const logPath = path.join(userDataDir, "store-node-boot.log");
 
   try {
     writeFileSync(
@@ -178,25 +139,17 @@ function makeStoreNodeLogger(
     // Logging must never block startup.
   }
 
-  const log = (
-    line: string,
-  ): void => {
+  const log = (line: string): void => {
     storeNodeLogTail.push(line);
 
-    if (
-      storeNodeLogTail.length >
-      STORE_NODE_LOG_TAIL_MAX
-    ) {
+    if (storeNodeLogTail.length > STORE_NODE_LOG_TAIL_MAX) {
       storeNodeLogTail.shift();
     }
 
     console.log(line);
 
     try {
-      appendFileSync(
-        logPath,
-        line + "\n",
-      );
+      appendFileSync(logPath, line + "\n");
     } catch {
       // Best-effort logging.
     }
@@ -208,69 +161,44 @@ function makeStoreNodeLogger(
   };
 }
 
-function showStoreNodeStartupError(
-  err: unknown,
-  logPath?: string,
-): void {
-  const message =
-    err instanceof Error
-      ? err.message
-      : String(err);
+function showStoreNodeStartupError(err: unknown, logPath?: string): void {
+  const message = err instanceof Error ? err.message : String(err);
 
-  console.error(
-    "Failed to start the store-node backend:",
-    err,
-  );
+  console.error("Failed to start the store-node backend:", err);
 
-  const tail =
-    storeNodeLogTail
-      .slice(-25)
-      .join("\n");
+  const tail = storeNodeLogTail.slice(-25).join("\n");
 
   dialog.showErrorBox(
     "RX POS could not start",
 
     "The local store-node backend failed to start, so RX POS cannot open.\n\n" +
       message +
-      (tail
-        ? `\n\n--- backend output (last lines) ---\n${tail}`
-        : "") +
-      (logPath
-        ? `\n\nFull log saved to:\n${logPath}`
-        : "") +
+      (tail ? `\n\n--- backend output (last lines) ---\n${tail}` : "") +
+      (logPath ? `\n\nFull log saved to:\n${logPath}` : "") +
       "\n\nIf this keeps happening, check that the backend was built " +
       "(cd backend && npm run build) and its native module targets " +
       "Electron (npm run rebuild:native:backend from desktop).",
   );
 }
 
-if (
-  process.env
-    .RXPOS_LAUNCH_ON_BOOT === "1"
-) {
+if (process.env.RXPOS_LAUNCH_ON_BOOT === "1") {
   app.setLoginItemSettings({
     openAtLogin: true,
   });
 }
 
-const crashHistoryFile =
-  path.join(
-    app.getPath("userData"),
-    "crash-history.json",
-  );
+const crashHistoryFile = path.join(
+  app.getPath("userData"),
+  "crash-history.json",
+);
 
 const onCrash = (): void => {
   killStoreNodeNow?.();
 
-  const relaunch =
-    recordCrashAndShouldRelaunch(
-      crashHistoryFile,
-      Date.now(),
-      {
-        maxRestarts: 3,
-        windowMs: 60_000,
-      },
-    );
+  const relaunch = recordCrashAndShouldRelaunch(crashHistoryFile, Date.now(), {
+    maxRestarts: 3,
+    windowMs: 60_000,
+  });
 
   if (relaunch) {
     app.relaunch();
@@ -279,175 +207,149 @@ const onCrash = (): void => {
   app.exit(0);
 };
 
-app.on(
-  "render-process-gone",
-  onCrash,
-);
+app.on("render-process-gone", onCrash);
 
-app.on(
-  "child-process-gone",
-  onCrash,
-);
+app.on("child-process-gone", onCrash);
 
-app.whenReady().then(
-  async () => {
-    const resourcePaths =
-      resolveStoreNodeResourcePaths({
-        isPackaged:
-          app.isPackaged,
+app.whenReady().then(async () => {
+  const resourcePaths = resolveStoreNodeResourcePaths({
+    isPackaged: app.isPackaged,
 
-        appPath:
-          app.getAppPath(),
+    appPath: app.getAppPath(),
 
-        resourcesPath:
-          process.resourcesPath,
-      });
+    resourcesPath: process.resourcesPath,
+  });
+  registerCloudAuthIpc();
 
-    const backendDir =
-      resourcePaths.backendDir;
+  const backendDir = resourcePaths.backendDir;
 
-    const userDataDir =
-      app.getPath("userData");
+  const userDataDir = app.getPath("userData");
 
-    const {
-      log: logStoreNode,
-      logPath:
-        storeNodeLogPath,
-    } = makeStoreNodeLogger(
+  const { log: logStoreNode, logPath: storeNodeLogPath } =
+    makeStoreNodeLogger(userDataDir);
+
+  const electronNativeOverride = {
+    hookPath: resourcePaths.hookPath,
+
+    sqlcipherEntry: resourcePaths.sqlcipherEntry,
+  };
+
+  let setupAccessCode: string | undefined;
+
+  let deviceId: string;
+
+  let storeNode: StoreNodeHandle;
+
+  try {
+    /**
+     * Device identity is resolved ONCE for this boot.
+     *
+     * The same exact value is used for:
+     *
+     *   SQLCipher key derivation
+     *   SYNC_DEVICE_ID
+     *   renderer device bridge
+     *   future RXAdmin device activation
+     *
+     * Do not fall back to a shared/static device ID here.
+     */
+    deviceId = (await getDeviceFingerprint()).trim();
+
+    if (!deviceId) {
+      throw new Error("RX POS device fingerprint is unavailable.");
+    }
+
+    /**
+     * Expose the same fingerprint to preload before the renderer is created.
+     *
+     * No fingerprint is written to localStorage.
+     */
+    process.env.RXPOS_DEVICE_FINGERPRINT = deviceId;
+
+    const secrets = loadOrCreateStoreNodeSecrets(userDataDir);
+
+    setupAccessCode = secrets.SETUP_ACCESS_CODE;
+
+    const dbPath = storeNodeDbPath(userDataDir);
+
+    /**
+     * Critical:
+     *
+     * SQLCipher uses the real RX POS device fingerprint.
+     */
+    const key = deriveStoreNodeDbKey({
+      backendDir,
+
+      masterKey: secrets.LOCAL_DB_MASTER_KEY,
+
+      deviceId,
+    });
+
+    const { firstRun } = await ensureStoreNodeReady({
+      dbPath,
+      key,
+      backendDir,
+
+      oneShotScriptPath: resourcePaths.oneShotScriptPath,
+
+      electronNativeOverride,
+
+      secrets,
+
+      onLog: logStoreNode,
+    });
+
+    if (firstRun) {
+      console.log(
+        "Store-node: first run — schema pushed to a fresh encrypted local DB.",
+      );
+    }
+
+    /**
+     * The exact same deviceId used for SQLCipher is passed to the backend as
+     * SYNC_DEVICE_ID.
+     */
+    storeNode = await startStoreNode({
+      deviceId,
+
+      backendEntry: resourcePaths.serverEntry,
+
+      backendCwd: backendDir,
+
       userDataDir,
-    );
 
-    const electronNativeOverride = {
-      hookPath:
-        resourcePaths.hookPath,
+      electronNativeOverride,
 
-      sqlcipherEntry:
-        resourcePaths.sqlcipherEntry,
-    };
+      onLog: logStoreNode,
+    });
+  } catch (err) {
+    showStoreNodeStartupError(err, storeNodeLogPath);
 
-    let setupAccessCode:
-      | string
-      | undefined;
+    app.quit();
 
-    let deviceId: string;
+    return;
+  }
 
-    let storeNode:
-      StoreNodeHandle;
+  stopStoreNode = storeNode.stop;
 
-    try {
-      /**
-       * Device identity is resolved ONCE for this boot.
-       *
-       * The same exact value is used for:
-       *
-       *   SQLCipher key derivation
-       *   SYNC_DEVICE_ID
-       *   renderer device bridge
-       *   future RXAdmin device activation
-       *
-       * Do not fall back to a shared/static device ID here.
-       */
-      deviceId =
-        (
-          await getDeviceFingerprint()
-        ).trim();
+  killStoreNodeNow = storeNode.killNow;
 
-      if (!deviceId) {
-        throw new Error(
-          "RX POS device fingerprint is unavailable.",
-        );
-      }
+  const apiOrigin = `http://127.0.0.1:${storeNode.port}`;
 
-      /**
-       * Expose the same fingerprint to preload before the renderer is created.
-       *
-       * No fingerprint is written to localStorage.
-       */
-      process.env
-        .RXPOS_DEVICE_FINGERPRINT =
-        deviceId;
+  process.env.RXPOS_API_ORIGIN = apiOrigin;
 
-      const secrets =
-        loadOrCreateStoreNodeSecrets(
-          userDataDir,
-        );
+  if (setupAccessCode) {
+    process.env.RXPOS_SETUP_ACCESS_CODE = setupAccessCode;
+  }
 
-      setupAccessCode =
-        secrets.SETUP_ACCESS_CODE;
+  const dir = bundleDir(process.resourcesPath);
 
-      const dbPath =
-        storeNodeDbPath(
-          userDataDir,
-        );
+  if (app.isPackaged) {
+    const integrity = verifyBundleIntegrity(dir);
 
-      /**
-       * Critical:
-       *
-       * SQLCipher uses the real RX POS device fingerprint.
-       */
-      const key =
-        deriveStoreNodeDbKey({
-          backendDir,
-
-          masterKey:
-            secrets
-              .LOCAL_DB_MASTER_KEY,
-
-          deviceId,
-        });
-
-      const {
-        firstRun,
-      } =
-        await ensureStoreNodeReady({
-          dbPath,
-          key,
-          backendDir,
-
-          oneShotScriptPath:
-            resourcePaths
-              .oneShotScriptPath,
-
-          electronNativeOverride,
-
-          secrets,
-
-          onLog:
-            logStoreNode,
-        });
-
-      if (firstRun) {
-        console.log(
-          "Store-node: first run — schema pushed to a fresh encrypted local DB.",
-        );
-      }
-
-      /**
-       * The exact same deviceId used for SQLCipher is passed to the backend as
-       * SYNC_DEVICE_ID.
-       */
-      storeNode =
-        await startStoreNode({
-          deviceId,
-
-          backendEntry:
-            resourcePaths
-              .serverEntry,
-
-          backendCwd:
-            backendDir,
-
-          userDataDir,
-
-          electronNativeOverride,
-
-          onLog:
-            logStoreNode,
-        });
-    } catch (err) {
-      showStoreNodeStartupError(
-        err,
-        storeNodeLogPath,
+    if (!integrity.ok) {
+      console.error(
+        `Integrity check failed: ${integrity.mismatch ?? "unknown"}`,
       );
 
       app.quit();
@@ -455,135 +357,53 @@ app.whenReady().then(
       return;
     }
 
-    stopStoreNode =
-      storeNode.stop;
+    const decryptKey = process.env.RENDERER_ENCRYPTION_KEY
+      ? keyFromEnv(process.env.RENDERER_ENCRYPTION_KEY)
+      : undefined;
 
-    killStoreNodeNow =
-      storeNode.killNow;
-
-    const apiOrigin =
-      `http://127.0.0.1:${storeNode.port}`;
-
-    process.env
-      .RXPOS_API_ORIGIN =
-      apiOrigin;
-
-    if (setupAccessCode) {
-      process.env
-        .RXPOS_SETUP_ACCESS_CODE =
-        setupAccessCode;
-    }
-
-    const dir =
-      bundleDir(
-        process.resourcesPath,
+    if (bundleIsEncrypted(dir) && !decryptKey) {
+      console.error(
+        "Renderer is encrypted but RENDERER_ENCRYPTION_KEY is not set — " +
+          "refusing to serve undecryptable bundle",
       );
 
-    if (app.isPackaged) {
-      const integrity =
-        verifyBundleIntegrity(dir);
-
-      if (!integrity.ok) {
-        console.error(
-          `Integrity check failed: ${
-            integrity.mismatch ??
-            "unknown"
-          }`,
-        );
-
-        app.quit();
-
-        return;
-      }
-
-      const decryptKey =
-        process.env
-          .RENDERER_ENCRYPTION_KEY
-          ? keyFromEnv(
-              process.env
-                .RENDERER_ENCRYPTION_KEY,
-            )
-          : undefined;
-
-      if (
-        bundleIsEncrypted(dir) &&
-        !decryptKey
-      ) {
-        console.error(
-          "Renderer is encrypted but RENDERER_ENCRYPTION_KEY is not set — " +
-            "refusing to serve undecryptable bundle",
-        );
-
-        app.quit();
-
-        return;
-      }
-
-      registerAppProtocol(
-        dir,
-        {
-          decryptKey,
-        },
-      );
-    }
-
-    createWindow(apiOrigin);
-
-    app.on(
-      "activate",
-      () => {
-        if (
-          BrowserWindow
-            .getAllWindows()
-            .length === 0
-        ) {
-          createWindow(
-            apiOrigin,
-          );
-        }
-      },
-    );
-  },
-);
-
-app.on(
-  "window-all-closed",
-  () => {
-    if (
-      process.platform !==
-      "darwin"
-    ) {
       app.quit();
-    }
-  },
-);
 
-let storeNodeStopping =
-  false;
-
-app.on(
-  "before-quit",
-  (event) => {
-    if (
-      !stopStoreNode ||
-      storeNodeStopping
-    ) {
       return;
     }
 
-    storeNodeStopping = true;
+    registerAppProtocol(dir, {
+      decryptKey,
+    });
+  }
 
-    event.preventDefault();
+  createWindow(apiOrigin);
 
-    stopStoreNode()
-      .catch((err) =>
-        console.error(
-          "Error stopping store-node backend:",
-          err,
-        ),
-      )
-      .finally(() =>
-        app.quit(),
-      );
-  },
-);
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(apiOrigin);
+    }
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+let storeNodeStopping = false;
+
+app.on("before-quit", (event) => {
+  if (!stopStoreNode || storeNodeStopping) {
+    return;
+  }
+
+  storeNodeStopping = true;
+
+  event.preventDefault();
+
+  stopStoreNode()
+    .catch((err) => console.error("Error stopping store-node backend:", err))
+    .finally(() => app.quit());
+});

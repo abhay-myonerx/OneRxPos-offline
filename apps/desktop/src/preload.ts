@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 import { buildBridgeStub } from "./bridge/stub";
 import type { LicenseStatus } from "./bridge/contract";
 
@@ -14,6 +14,21 @@ import type { LicenseStatus } from "./bridge/contract";
 const apiOrigin = process.env.RXPOS_API_ORIGIN ?? "http://localhost:4001";
 const statusUrl = apiOrigin + "/api/v2/license/status";
 const deviceFingerprint = process.env.RXPOS_DEVICE_FINGERPRINT ?? null;
+
+type CloudRequestPayload = {
+  url: string;
+
+  method: string;
+
+  headers?: Record<string, string>;
+
+  body?: string;
+};
+
+contextBridge.exposeInMainWorld("rxPosCloudAuth", {
+  request: (payload: CloudRequestPayload) =>
+    ipcRenderer.invoke("cloud-auth:request", payload),
+});
 
 const bridge = buildBridgeStub({
   platform: process.platform,

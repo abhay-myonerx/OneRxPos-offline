@@ -1,7 +1,9 @@
 /**
- * RX POS -> RXAdmin cloud authentication configuration.
+ * RX POS -> RXAdmin Auth V2 configuration.
  *
- * Authentication flow:
+ * RX POS uses the RX Connect authentication platform.
+ *
+ * Cloud authentication:
  *
  * RX POS
  *   ↓
@@ -10,119 +12,54 @@
  * platform = rx-connect
  * clientType = desktop
  *   ↓
- * One-time POS activation / approval
+ * Device approval / activation
  *   ↓
- * Local offline POS
+ * Offline local POS
  *
  * IMPORTANT:
  *
- * RXAdmin cloud authentication is separate from the
- * existing RX POS local Store Node authentication.
- *
- * Cloud tokens must never replace local POS JWT tokens.
+ * Cloud authentication is separate from the existing
+ * local RX POS authentication.
  */
 
-// -----------------------------------------------------------------------------
-// ENVIRONMENT CONFIGURATION
-// -----------------------------------------------------------------------------
+const DEFAULT_CLOUD_API_URL = "https://portal-api.myonerx.com/api";
 
-const configuredApiUrl = import.meta.env.VITE_RXADMIN_API_URL?.trim();
+const DEFAULT_PLATFORM = "rx-connect";
 
-const configuredPlatform = import.meta.env.VITE_RXADMIN_PLATFORM?.trim();
+const DEFAULT_CLIENT_TYPE = "desktop";
 
-const configuredClientType = import.meta.env.VITE_RXADMIN_CLIENT_TYPE?.trim();
+const DEFAULT_ACCESS_TOKEN_EXPIRES_IN_SECONDS = 15 * 60;
 
-// -----------------------------------------------------------------------------
-// HELPERS
-// -----------------------------------------------------------------------------
+const ACCESS_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
 
-function normalizeApiUrl(value: string): string {
-  return value.replace(/\/+$/, "");
+function normalizeApiUrl(value: string | undefined): string {
+  const url = value?.trim() || DEFAULT_CLOUD_API_URL;
+
+  return url.replace(/\/+$/, "");
 }
 
-// -----------------------------------------------------------------------------
-// CLOUD AUTH CONFIG
-// -----------------------------------------------------------------------------
-
 export const cloudAuthConfig = {
-  /**
-   * RXAdmin API root.
-   *
-   * Login endpoint:
-   *
-   * POST
-   * https://portal-api.myonerx.com/v2/auth/login
-   */
-  apiUrl: normalizeApiUrl(configuredApiUrl || "https://portal-api.myonerx.com"),
+  apiUrl: normalizeApiUrl(import.meta.env.VITE_RXADMIN_API_URL),
 
-  /**
-   * OneRx platform.
-   *
-   * IMPORTANT:
-   *
-   * RX POS currently uses the RX Connect platform
-   * authentication / approval flow.
-   */
-  platform: configuredPlatform || "rx-connect",
+  platform: import.meta.env.VITE_RXADMIN_PLATFORM?.trim() || DEFAULT_PLATFORM,
 
-  /**
-   * RX POS runs as an Electron desktop application.
-   *
-   * This is NOT the platform.
-   *
-   * platform   = rx-connect
-   * clientType = desktop
-   */
-  clientType: configuredClientType || "desktop",
+  clientType: import.meta.env.VITE_RXADMIN_CLIENT_TYPE?.trim() || DEFAULT_CLIENT_TYPE,
 
-  /**
-   * Default RXAdmin access token expiry.
-   *
-   * RXAdmin `expires_in` remains the source of truth.
-   *
-   * Fallback:
-   * 15 minutes.
-   */
-  defaultAccessTokenExpiresInSeconds: 15 * 60,
+  defaultAccessTokenExpiresInSeconds: DEFAULT_ACCESS_TOKEN_EXPIRES_IN_SECONDS,
 
-  /**
-   * Refresh the RXAdmin access token before expiry.
-   *
-   * 60 seconds before actual expiry.
-   */
-  accessTokenRefreshSkewMs: 60 * 1000,
+  accessTokenRefreshSkewMs: ACCESS_TOKEN_REFRESH_SKEW_MS,
 } as const;
-
-// -----------------------------------------------------------------------------
-// CONFIGURATION VALIDATION
-// -----------------------------------------------------------------------------
 
 export function assertCloudAuthConfigured(): void {
   if (!cloudAuthConfig.apiUrl) {
-    throw new Error("RXAdmin cloud API URL is not configured.");
+    throw new Error("RXAdmin API URL is not configured.");
   }
 
-  let parsedUrl: URL;
-
-  try {
-    parsedUrl = new URL(cloudAuthConfig.apiUrl);
-  } catch {
-    throw new Error("RXAdmin cloud API URL is invalid.");
+  if (!cloudAuthConfig.platform) {
+    throw new Error("RXAdmin platform is not configured.");
   }
 
-  const isHttps = parsedUrl.protocol === "https:";
-
-  const isLocalhost = parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1";
-
-  if (!isHttps && !isLocalhost) {
-    throw new Error("RXAdmin cloud API must use HTTPS.");
-  }
-
-  if (cloudAuthConfig.platform !== "rx-connect") {
-    throw new Error('RX POS cloud platform must be "rx-connect".');
-  }
-
-  if (cloudAuthConfig.clientType !== "desktop") {
-    throw new Error('RX POS cloud client type must be "desktop".');
+  if (!cloudAuthConfig.clientType) {
+    throw new Error("RXAdmin client type is not configured.");
   }
 }
