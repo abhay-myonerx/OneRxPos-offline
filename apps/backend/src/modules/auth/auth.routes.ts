@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authenticate } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
 import { authRateLimiter } from "../../middleware/authRateLimiter";
-import { registerSchema, loginSchema, changePasswordSchema } from "./auth.validation";
+import { registerSchema, loginSchema, cloudLoginSchema, changePasswordSchema } from "./auth.validation";
 import { blockRegistrationWhenTenantExists } from "./registration-guard";
 import * as controller from "./auth.controller";
 
@@ -22,6 +22,8 @@ router.post(
 );
 
 router.post("/login", authRateLimiter, validate(loginSchema), controller.login);
+
+router.post("/cloud-login", authRateLimiter, validate(cloudLoginSchema),controller.cloudLogin);
 
 // Refresh also gets strict limiting — prevents refresh-token bruteforce.
 router.post("/refresh", authRateLimiter, controller.refresh);

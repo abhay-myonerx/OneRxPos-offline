@@ -12,7 +12,12 @@ import { NotFoundError } from "../../shared/errors/NotFoundError";
 import { ValidationError } from "../../shared/errors/ValidationError";
 import { config } from "../../config";
 import { logger } from "../../shared/utils/logger";
-import type { RegisterInput, LoginInput, ChangePasswordInput } from "./auth.validation";
+import type {
+  RegisterInput,
+  LoginInput,
+  ChangePasswordInput,
+  CloudLoginInput,
+} from "./auth.validation";
 import { resolveUserPermissionsArray } from "../../shared/permissions/resolver";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -476,4 +481,106 @@ export async function logout(refreshTokenValue: string) {
     where: { token: refreshTokenValue },
   });
   return { success: true };
+}
+
+export async function cloudLogin(input: CloudLoginInput) {
+  let user = await prisma.user.findFirst({
+    where: {
+      email: input.email,
+    },
+    include: {
+      tenant: {
+        select: {
+          id: true,
+          status: true,
+          slug: true,
+          name: true,
+          plan: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    const tenantCount = await prisma.tenant.count();
+
+    if (tenantCount === 0) {
+      const result = await register({
+        businessName: input.pharmacyName,
+        businessEmail: input.email,
+        businessPhone: "",
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        password: input.password,
+      });
+
+      return result;
+    }
+
+    throw new AuthenticationError("This RXAdmin account has not been provisioned for this POS.");
+  }
+
+  if (user.tenant.status === "SUSPENDED") {
+    throw new AuthenticationError("Your account has been suspended.");
+  }
+
+  if (user.tenant.status === "CANCELLED") {
+    throw new AuthenticationError("Your account has been cancelled.");
+  }
+
+  if (!user.isActive) {
+    throw new AuthenticationError("Your user account is deactivated.");
+  }
+
+  await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      lastLoginAt: new Date(),
+    },
+  });
+
+  const storeIds = await getUserStoreIds(user.tenantId, user.storeId, user.role);
+
+  const payload = buildTokenPayload(
+    {
+      id: user.id,
+      tenantId: user.tenantId,
+      storeId: user.storeId,
+      role: user.role,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    },
+    storeIds,
+  );
+
+  const tokens = await issueTokens(user.id, payload);
+
+  const permissions = resolveUserPermissionsArray({
+    id: user.id,
+    role: user.role,
+    tenantId: user.tenantId,
+  });
+
+  return {
+    ...tokens,
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      storeId: user.storeId,
+      permissions,
+    },
+    tenant: {
+      id: user.tenant.id,
+      name: user.tenant.name,
+      slug: user.tenant.slug,
+      plan: user.tenant.plan,
+    },
+  };
 }

@@ -148,3 +148,23 @@ export async function me(req: Request, res: Response, next: NextFunction) {
     next(error);
   }
 }
+
+export async function cloudLogin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await authService.cloudLogin(req.body);
+
+    setRefreshCookie(res, result.refreshToken);
+
+    const { refreshToken: _rt, ...safeResult } = result;
+
+    res.json({
+      success: true,
+      data: {
+        ...safeResult,
+        isDemoMode: config.DEMO_MODE,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
