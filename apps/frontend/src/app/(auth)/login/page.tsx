@@ -278,11 +278,16 @@ export default function LoginPage() {
         body: JSON.stringify({
           email: result.user.email,
           password: form.password.trim(),
-          firstName: result.user.licenseeFirstName,
-          lastName: result.user.licenseeLastName,
-          pharmacyId: result.user.pharmacyId,
-          pharmacyName: result.user.pharmacyName,
           role: result.user.role,
+
+          firstName: result.user.licenseeFirstName ?? (result.user as any).firstName ?? (result.user as any).pharmacy?.pharmacy_name ?? "",
+
+          lastName: result.user.licenseeLastName ?? (result.user as any).lastName ?? (result.user as any).pharmacy?.pharmacy_name ?? "",
+
+          pharmacyId: result.user.pharmacyId ?? (result.user as any).pharmacy?.pharmacy_id ?? "",
+
+          pharmacyName:
+            result.user.pharmacyName ?? (result.user as any).pharmacy?.pharmacy_name ?? "",
         }),
       });
 

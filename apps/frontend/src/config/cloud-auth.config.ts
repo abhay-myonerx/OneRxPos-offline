@@ -13,7 +13,7 @@
 
 const DEFAULT_API_URL = "https://portal-api.myonerx.com/api";
 
-const DEFAULT_PLATFORM = "rx-connect";
+const DEFAULT_PLATFORM = "rx-pos";
 
 const DEFAULT_CLIENT_TYPE = "desktop";
 

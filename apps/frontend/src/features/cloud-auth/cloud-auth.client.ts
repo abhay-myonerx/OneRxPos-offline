@@ -86,17 +86,37 @@ function normalizeAuthenticatedSession(data: PortalLoginData): CloudAuthResult {
 
     user: {
       email: data.email,
+
       role: data.role,
+
       userType: data.userType,
-      pharmacyId: data.pharmacyId,
-      pharmacyName: data.pharmacyName,
-      licenseeFirstName: data.licenseeFirstName,
-      licenseeLastName: data.licenseeLastName,
-      licenseeEmail: data.licenseeEmail,
+
+      // Supports rx-connect + rx-pos
+      pharmacyId: (data as any).pharmacyId ?? (data as any).pharmacy?.pharmacy_id ?? "",
+
+      pharmacyName: (data as any).pharmacyName ?? (data as any).pharmacy?.pharmacy_name ?? "",
+
+      // Supports rx-connect + rx-pos + future APIs
+      licenseeFirstName:
+        (data as any).licenseeFirstName ??
+        (data as any).firstName ??
+        (data as any).first_name ??
+        (data as any).pharmacyName ??
+        (data as any).pharmacy?.pharmacy_name ??
+        "",
+
+      licenseeLastName:
+        (data as any).licenseeLastName ?? (data as any).lastName ?? (data as any).last_name ?? (data as any).pharmacy?.pharmacy_name ?? (data as any).pharmacyName ?? "",
+
+      licenseeEmail: (data as any).licenseeEmail ?? data.email,
+
       mustChangePassword: data.mustChangePassword,
-      canManageExtensions: data.canManageExtensions,
-      canManagePhoneNumbers: data.canManagePhoneNumbers,
-      canViewCallLogs: data.canViewCallLogs,
+
+      canManageExtensions: (data as any).canManageExtensions ?? false,
+
+      canManagePhoneNumbers: (data as any).canManagePhoneNumbers ?? false,
+
+      canViewCallLogs: (data as any).canViewCallLogs ?? false,
     },
   };
 }
