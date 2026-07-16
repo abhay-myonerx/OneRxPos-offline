@@ -8,20 +8,6 @@ type CloudTokenState = {
   expiresAt: number | null;
 };
 
-/**
- * RXAdmin cloud tokens.
- *
- * These tokens are intentionally memory-only.
- *
- * Never persist them to:
- *
- * - localStorage
- * - sessionStorage
- * - IndexedDB
- * - Redux persisted state
- *
- * Cloud authentication is used for POS activation.
- */
 const state: CloudTokenState = {
   accessToken: null,
 
@@ -30,9 +16,7 @@ const state: CloudTokenState = {
   expiresAt: null,
 };
 
-function normalizeExpiresIn(
-  expiresInSeconds?: number,
-): number {
+function normalizeExpiry(expiresInSeconds?: number): number {
   if (
     typeof expiresInSeconds !== "number" ||
     !Number.isFinite(expiresInSeconds) ||
@@ -51,10 +35,8 @@ export const CloudTokenManager = {
     refreshToken?: string | null;
 
     expiresInSeconds?: number;
-  }): void {
-    const expiresInSeconds = normalizeExpiresIn(
-      params.expiresInSeconds,
-    );
+  }) {
+    const expiresIn = normalizeExpiry(params.expiresInSeconds);
 
     state.accessToken = params.accessToken;
 
@@ -62,63 +44,50 @@ export const CloudTokenManager = {
       state.refreshToken = params.refreshToken;
     }
 
-    state.expiresAt =
-      Date.now() +
-      expiresInSeconds * 1000;
+    state.expiresAt = Date.now() + expiresIn * 1000;
   },
 
-  setAccessToken(params: {
-    accessToken: string;
-
-    expiresInSeconds?: number;
-  }): void {
-    const expiresInSeconds = normalizeExpiresIn(
-      params.expiresInSeconds,
-    );
-
-    state.accessToken = params.accessToken;
-
-    state.expiresAt =
-      Date.now() +
-      expiresInSeconds * 1000;
-  },
-
-  getAccessToken(): string | null {
+  getAccessToken() {
     return state.accessToken;
   },
 
-  getRefreshToken(): string | null {
+  getRefreshToken() {
     return state.refreshToken;
   },
 
-  getExpiresAt(): number | null {
+  getExpiresAt() {
     return state.expiresAt;
   },
 
-  hasAccessToken(): boolean {
+  hasAccessToken() {
     return Boolean(state.accessToken);
   },
 
-  hasRefreshToken(): boolean {
+  hasRefreshToken() {
     return Boolean(state.refreshToken);
   },
 
-  isAccessTokenUsable(): boolean {
-    if (
-      !state.accessToken ||
-      !state.expiresAt
-    ) {
-      return false;
+  isExpired() {
+    if (!state.expiresAt) {
+      return true;
     }
 
-    return (
-      Date.now() <
-      state.expiresAt -
-        cloudAuthConfig.accessTokenRefreshSkewMs
-    );
+    return Date.now() >= state.expiresAt;
   },
 
-  clear(): void {
+  shouldRefresh() {
+    if (!state.expiresAt) {
+      return true;
+    }
+
+    return Date.now() >= state.expiresAt - cloudAuthConfig.accessTokenRefreshSkewMs;
+  },
+
+  isAccessTokenUsable() {
+    return this.hasAccessToken() && !this.shouldRefresh();
+  },
+
+  clear() {
     state.accessToken = null;
 
     state.refreshToken = null;

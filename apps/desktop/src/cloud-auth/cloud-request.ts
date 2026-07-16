@@ -121,13 +121,6 @@ export async function performCloudRequest(
 
   const body = await response.text();
 
-  console.log("[cloud-auth] cloud response", {
-    pathname: url.pathname,
-
-    method,
-
-    status: response.status,
-  });
 
   return {
     ok: response.ok,

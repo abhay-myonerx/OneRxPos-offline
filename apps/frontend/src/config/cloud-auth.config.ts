@@ -1,39 +1,28 @@
 /**
- * RX POS -> RXAdmin Auth V2 configuration.
+ * RX POS → RXAdmin Auth V2 configuration.
  *
- * RX POS uses the RX Connect authentication platform.
+ * RX POS authenticates against RXAdmin using the
+ * rx-connect platform.
  *
- * Cloud authentication:
+ * This configuration is used ONLY for cloud
+ * authentication and device activation.
  *
- * RX POS
- *   ↓
- * RXAdmin Auth V2
- *   ↓
- * platform = rx-connect
- * clientType = desktop
- *   ↓
- * Device approval / activation
- *   ↓
- * Offline local POS
- *
- * IMPORTANT:
- *
- * Cloud authentication is separate from the existing
- * local RX POS authentication.
+ * Local POS authentication remains completely
+ * independent.
  */
 
-const DEFAULT_CLOUD_API_URL = "https://portal-api.myonerx.com/api";
+const DEFAULT_API_URL = "https://portal-api.myonerx.com/api";
 
 const DEFAULT_PLATFORM = "rx-connect";
 
 const DEFAULT_CLIENT_TYPE = "desktop";
 
-const DEFAULT_ACCESS_TOKEN_EXPIRES_IN_SECONDS = 15 * 60;
+const DEFAULT_ACCESS_TOKEN_EXPIRES = 15 * 60;
 
-const ACCESS_TOKEN_REFRESH_SKEW_MS = 60 * 1000;
+const ACCESS_TOKEN_REFRESH_SKEW = 60 * 1000;
 
-function normalizeApiUrl(value: string | undefined): string {
-  const url = value?.trim() || DEFAULT_CLOUD_API_URL;
+function normalizeApiUrl(value?: string): string {
+  const url = value?.trim() || DEFAULT_API_URL;
 
   return url.replace(/\/+$/, "");
 }
@@ -45,21 +34,37 @@ export const cloudAuthConfig = {
 
   clientType: import.meta.env.VITE_RXADMIN_CLIENT_TYPE?.trim() || DEFAULT_CLIENT_TYPE,
 
-  defaultAccessTokenExpiresInSeconds: DEFAULT_ACCESS_TOKEN_EXPIRES_IN_SECONDS,
+  defaultAccessTokenExpiresInSeconds: DEFAULT_ACCESS_TOKEN_EXPIRES,
 
-  accessTokenRefreshSkewMs: ACCESS_TOKEN_REFRESH_SKEW_MS,
+  accessTokenRefreshSkewMs: ACCESS_TOKEN_REFRESH_SKEW,
+} as const;
+
+export const CloudEndpoints = {
+  LOGIN: "/v2/auth/login",
+
+  REFRESH: "/v2/auth/refresh-token",
+
+  REQUEST_OTP: "/v2/auth/otp/request",
+
+  VERIFY_OTP: "/v2/auth/otp/verify",
+
+  VERIFY_MFA: "/v2/auth/mfa/verify",
+
+  MFA_RECOVERY: "/v2/auth/mfa/recovery",
+
+  SELECT_PHARMACY: "/v2/auth/select-pharmacy",
 } as const;
 
 export function assertCloudAuthConfigured(): void {
   if (!cloudAuthConfig.apiUrl) {
-    throw new Error("RXAdmin API URL is not configured.");
+    throw new Error("RXAdmin API URL is missing.");
   }
 
   if (!cloudAuthConfig.platform) {
-    throw new Error("RXAdmin platform is not configured.");
+    throw new Error("RXAdmin platform is missing.");
   }
 
   if (!cloudAuthConfig.clientType) {
-    throw new Error("RXAdmin client type is not configured.");
+    throw new Error("RXAdmin client type is missing.");
   }
 }

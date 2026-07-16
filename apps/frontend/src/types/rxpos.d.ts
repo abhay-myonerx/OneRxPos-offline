@@ -15,6 +15,7 @@ export {};
 declare global {
   interface Window {
     rxpos?: {
+      getFingerprint(): string | PromiseLike<string>;
       // The store-node backend origin the desktop launcher bound this session
       // (a dynamic free port). The SPA prefers this over its build-time
       // VITE_API_URL default so it reaches the just-spawned backend — see

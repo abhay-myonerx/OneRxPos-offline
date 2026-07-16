@@ -58,7 +58,17 @@ function registerCloudAuthIpc(): void {
   ipcMain.removeHandler("cloud-auth:request");
 
   ipcMain.handle("cloud-auth:request", async (_event, payload) => {
-    return performCloudRequest(payload);
+    try {
+      const response = await performCloudRequest(payload);
+
+
+      return response;
+    } catch (error) {
+    
+      console.error(error);
+
+      throw error;
+    }
   });
 }
 

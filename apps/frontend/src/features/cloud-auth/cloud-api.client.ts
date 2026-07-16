@@ -2,22 +2,16 @@ import { assertCloudAuthConfigured, cloudAuthConfig } from "../../config/cloud-a
 
 import type { PortalApiEnvelope } from "../../types/cloud-auth/cloud-auth.types";
 
-// -----------------------------------------------------------------------------
-// ERROR
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* ERROR                                                                      */
+/* -------------------------------------------------------------------------- */
 
 export class CloudAuthApiError extends Error {
   readonly status: number;
 
   readonly payload: unknown;
 
-  constructor(params: {
-    message: string;
-
-    status: number;
-
-    payload: unknown;
-  }) {
+  constructor(params: { message: string; status: number; payload: unknown }) {
     super(params.message);
 
     this.name = "CloudAuthApiError";
@@ -28,51 +22,41 @@ export class CloudAuthApiError extends Error {
   }
 }
 
-// -----------------------------------------------------------------------------
-// ERROR MESSAGE
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* HELPERS                                                                    */
+/* -------------------------------------------------------------------------- */
 
-function extractErrorMessage(payload: unknown): string | null {
+function extractMessage(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
 
-  const value = payload as Record<string, unknown>;
+  const obj = payload as Record<string, unknown>;
 
-  if (typeof value.message === "string" && value.message.trim()) {
-    return value.message;
+  if (typeof obj.message === "string" && obj.message.trim()) {
+    return obj.message;
   }
 
-  if (typeof value.error === "string" && value.error.trim()) {
-    return value.error;
+  if (typeof obj.error === "string" && obj.error.trim()) {
+    return obj.error;
   }
 
-  const data = value.data;
+  if (obj.data && typeof obj.data === "object") {
+    const data = obj.data as Record<string, unknown>;
 
-  if (data && typeof data === "object") {
-    const dataValue = data as Record<string, unknown>;
-
-    if (typeof dataValue.message === "string" && dataValue.message.trim()) {
-      return dataValue.message;
+    if (typeof data.message === "string" && data.message.trim()) {
+      return data.message;
     }
 
-    if (typeof dataValue.error === "string" && dataValue.error.trim()) {
-      return dataValue.error;
+    if (typeof data.error === "string" && data.error.trim()) {
+      return data.error;
     }
   }
 
   return null;
 }
 
-// -----------------------------------------------------------------------------
-// RESPONSE PAYLOAD
-// -----------------------------------------------------------------------------
-
-function parseResponsePayload(
-  body: string,
-
-  contentType: string,
-): unknown {
+function parsePayload(body: string, contentType: string): unknown {
   if (!body) {
     return null;
   }
@@ -92,23 +76,17 @@ function parseResponsePayload(
   }
 }
 
-// -----------------------------------------------------------------------------
-// REQUEST
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* REQUEST                                                                     */
+/* -------------------------------------------------------------------------- */
 
-export async function cloudRequest<T>(
-  path: string,
-
-  init: RequestInit,
-): Promise<T> {
+export async function cloudRequest<T>(path: string, init: RequestInit): Promise<T> {
   assertCloudAuthConfigured();
 
   if (typeof window === "undefined" || !window.rxPosCloudAuth) {
     throw new CloudAuthApiError({
-      message: "RX POS desktop cloud transport is unavailable.",
-
+      message: "Electron cloud bridge is unavailable.",
       status: 0,
-
       payload: null,
     });
   }
@@ -117,59 +95,43 @@ export async function cloudRequest<T>(
 
   const headers: Record<string, string> = {
     accept: "application/json",
-
     "content-type": "application/json",
   };
 
   if (init.headers) {
     const source = new Headers(init.headers);
 
-    source.forEach((value, key) => {
-      headers[key] = value;
+    source.forEach((v, k) => {
+      headers[k] = v;
     });
   }
 
-  let response;
+  console.log("[Cloud Request]", url);
 
-  try {
-    response = await window.rxPosCloudAuth.request({
-      url,
+  console.log(headers);
 
-      method: init.method ?? "GET",
+  console.log(init.body);
 
-      headers,
+  const response = await window.rxPosCloudAuth.request({
+    url,
 
-      body: typeof init.body === "string" ? init.body : undefined,
-    });
-  } catch (error) {
-    throw new CloudAuthApiError({
-      message:
-        error instanceof Error && error.message
-          ? error.message
-          : "Unable to connect to OneRx cloud. Check your internet connection.",
+    method: init.method ?? "GET",
 
-      status: 0,
+    headers,
 
-      payload: null,
-    });
-  }
+    body: typeof init.body === "string" ? init.body : undefined,
+  });
 
-  const contentType = response.headers["content-type"] ?? "";
+  console.log("[Cloud Response]", response.status);
 
-  const payload = parseResponsePayload(
-    response.body,
+  console.log(response.body);
 
-    contentType,
-  );
+  const payload = parsePayload(response.body, response.headers["content-type"] ?? "");
 
   if (!response.ok) {
     throw new CloudAuthApiError({
-      message:
-        extractErrorMessage(payload) ??
-        `OneRx cloud request failed with status ${response.status}.`,
-
+      message: extractMessage(payload) ?? `HTTP ${response.status}`,
       status: response.status,
-
       payload,
     });
   }
@@ -177,27 +139,23 @@ export async function cloudRequest<T>(
   return payload as T;
 }
 
-// -----------------------------------------------------------------------------
-// ENVELOPE
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* ENVELOPE                                                                    */
+/* -------------------------------------------------------------------------- */
 
 export function unwrapCloudEnvelope<T>(response: PortalApiEnvelope<T>): T {
-  if (response.success === false) {
+  if (!response.success) {
     throw new CloudAuthApiError({
-      message: response.message || response.error || "OneRx cloud request failed.",
-
+      message: response.message ?? response.error ?? "Cloud request failed.",
       status: 400,
-
       payload: response,
     });
   }
 
   if (response.data === undefined) {
     throw new CloudAuthApiError({
-      message: "OneRx cloud returned no response data.",
-
+      message: "Response data missing.",
       status: 500,
-
       payload: response,
     });
   }

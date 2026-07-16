@@ -1,4 +1,4 @@
-import { cloudAuthConfig } from "../../config/cloud-auth.config";
+import { cloudAuthConfig, CloudEndpoints } from "../../config/cloud-auth.config";
 
 import { CloudTokenManager } from "../../lib/cloud-auth/cloud-token-manager";
 
@@ -18,31 +18,17 @@ import type {
 
 import { CloudAuthApiError, cloudRequest, unwrapCloudEnvelope } from "./cloud-api.client";
 
-// -----------------------------------------------------------------------------
-// NORMALIZE AUTH RESULT
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* NORMALIZE RESULT                                                            */
+/* -------------------------------------------------------------------------- */
 
 export function normalizeCloudAuthResult(data: PortalLoginResponseData): CloudAuthResult {
-  /*
-   * RXAdmin remains the source of truth for:
-   *
-   * - active account
-   * - inactive account
-   * - disabled account
-   * - suspended account
-   * - device approval
-   *
-   * RX POS must not invent a second account-status authority.
-   */
-
   if (isPortalDeviceApprovalData(data)) {
     CloudTokenManager.clear();
 
     return {
       kind: "device_approval_pending",
-
       status: data.status,
-
       message: data.message,
     };
   }
@@ -52,9 +38,7 @@ export function normalizeCloudAuthResult(data: PortalLoginResponseData): CloudAu
 
     return {
       kind: "mfa_required",
-
       method: data.mfa_method,
-
       challengeToken: data.challenge_token,
     };
   }
@@ -64,9 +48,7 @@ export function normalizeCloudAuthResult(data: PortalLoginResponseData): CloudAu
 
     return {
       kind: "pharmacy_selection_required",
-
       selectionToken: data.selection_token,
-
       pharmacies: data.pharmacies,
     };
   }
@@ -74,17 +56,15 @@ export function normalizeCloudAuthResult(data: PortalLoginResponseData): CloudAu
   return normalizeAuthenticatedSession(data);
 }
 
-// -----------------------------------------------------------------------------
-// AUTHENTICATED SESSION
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* AUTHENTICATED                                                               */
+/* -------------------------------------------------------------------------- */
 
 function normalizeAuthenticatedSession(data: PortalLoginData): CloudAuthResult {
-  if (!data.access_token || !data.refresh_token || !data.email || !data.role || !data.pharmacyId) {
+  if (!data.access_token || !data.refresh_token) {
     throw new CloudAuthApiError({
-      message: "OneRx cloud returned an invalid authentication response.",
-
+      message: "Invalid RXAdmin authentication response.",
       status: 500,
-
       payload: data,
     });
   }
@@ -93,9 +73,7 @@ function normalizeAuthenticatedSession(data: PortalLoginData): CloudAuthResult {
 
   CloudTokenManager.setTokens({
     accessToken: data.access_token,
-
     refreshToken: data.refresh_token,
-
     expiresInSeconds: expiresIn,
   });
 
@@ -108,80 +86,82 @@ function normalizeAuthenticatedSession(data: PortalLoginData): CloudAuthResult {
 
     user: {
       email: data.email,
-
       role: data.role,
-
       userType: data.userType,
-
       pharmacyId: data.pharmacyId,
-
       pharmacyName: data.pharmacyName,
-
       licenseeFirstName: data.licenseeFirstName,
-
       licenseeLastName: data.licenseeLastName,
-
       licenseeEmail: data.licenseeEmail,
-
       mustChangePassword: data.mustChangePassword,
-
       canManageExtensions: data.canManageExtensions,
-
       canManagePhoneNumbers: data.canManagePhoneNumbers,
-
       canViewCallLogs: data.canViewCallLogs,
     },
   };
 }
 
-// -----------------------------------------------------------------------------
-// AUTH ERROR
-// -----------------------------------------------------------------------------
-
-function normalizeCloudAuthError(error: unknown): never {
-  if (error instanceof CloudAuthApiError) {
-    if (
-      error.status === 400 ||
-      error.status === 401 ||
-      error.status === 403 ||
-      error.status === 429
-    ) {
-      throw new Error(error.message);
-    }
-  }
-
-  throw error;
-}
-
-// -----------------------------------------------------------------------------
-// LOGIN
-// -----------------------------------------------------------------------------
+/* -------------------------------------------------------------------------- */
+/* LOGIN                                                                       */
+/* -------------------------------------------------------------------------- */
 
 export async function cloudLogin(payload: CloudLoginRequest): Promise<CloudAuthResult> {
   CloudTokenManager.clear();
 
+  let deviceId = "";
+
+  try {
+    if (typeof window !== "undefined" && window.rxpos?.device?.getFingerprint) {
+      deviceId = await window.rxpos.device.getFingerprint();
+    }
+  } catch (error) {
+    console.warn("[RXADMIN] Failed to get device fingerprint.", error);
+  }
+
+  const requestBody = {
+    email: payload.email.trim().toLowerCase(),
+
+    password: payload.password,
+
+    platform: cloudAuthConfig.platform,
+
+    clientType: cloudAuthConfig.clientType,
+
+    deviceId,
+  };
+
+  console.log("====================================");
+  console.log("[RXADMIN LOGIN REQUEST]");
+  console.log(requestBody);
+  console.log("====================================");
+
   try {
     const response = await cloudRequest<PortalApiEnvelope<PortalLoginResponseData>>(
-      "/v2/auth/login",
+      CloudEndpoints.LOGIN,
       {
         method: "POST",
-
-        body: JSON.stringify({
-          email: payload.email.trim().toLowerCase(),
-
-          password: payload.password,
-
-          platform: cloudAuthConfig.platform,
-
-          clientType: cloudAuthConfig.clientType,
-        }),
+        body: JSON.stringify(requestBody),
       },
     );
+
+    console.log("====================================");
+    console.log("[RXADMIN LOGIN RESPONSE]");
+    console.log(response);
+    console.log("====================================");
 
     return normalizeCloudAuthResult(unwrapCloudEnvelope(response));
   } catch (error) {
     CloudTokenManager.clear();
 
-    return normalizeCloudAuthError(error);
+    console.error("====================================");
+    console.error("[RXADMIN LOGIN ERROR]");
+    console.error(error);
+    console.error("====================================");
+
+    if (error instanceof CloudAuthApiError) {
+      throw new Error(error.message);
+    }
+
+    throw error;
   }
 }
