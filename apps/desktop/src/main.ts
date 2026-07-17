@@ -90,7 +90,7 @@ function createWindow(apiOrigin: string): BrowserWindow {
     windowOptions.webPreferences = {
       ...windowOptions.webPreferences,
 
-      devTools: true,
+      devTools: false, // Disable DevTools by default.
     };
   }
 
@@ -115,15 +115,6 @@ function createWindow(apiOrigin: string): BrowserWindow {
     devServerUrl: process.env.RXPOS_DEV_SERVER ?? "http://localhost:3000",
   });
 
-  console.log("==================================");
-
-  console.log("Electron Entry:", entry);
-
-  console.log("Electron URL :", entry.url);
-
-  console.log("Test DevTools:", enableTestDevTools);
-
-  console.log("==================================");
 
   win.loadURL(entry.url);
 
