@@ -504,7 +504,7 @@ export async function cloudLogin(input: CloudLoginInput) {
   if (!user) {
     const tenantCount = await prisma.tenant.count();
 
-    if (tenantCount === 0) {
+    if (tenantCount === 1 || tenantCount === 0) {
       const result = await register({
         businessName: input.pharmacyName,
         businessEmail: input.email,
