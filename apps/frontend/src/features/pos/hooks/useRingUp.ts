@@ -561,7 +561,9 @@ export function useRingUp() {
             }
           } else {
             showApiError({
-              data: { error: { message: "Couldn't identify the scanned item — use manual entry (F3)." } },
+              data: {
+                error: { message: "Couldn't identify the scanned item — use manual entry (F3)." },
+              },
             });
           }
           return;
@@ -930,9 +932,7 @@ export function useRingUp() {
     if (!effectiveStoreId) return;
     // Open-till gate (Phase 1.4) — no sale without an open cashier shift.
     if (!tillSession.isOpen) {
-      showApiError({
-        data: { error: { message: "Open the till (enter a starting float) before taking payment." } },
-      });
+      showApiError(new Error("Open the till (enter a starting float) before taking payment."));
       return;
     }
     // Pharmacy schedule gate (Phase 2.2) — link an Rx / get consult first.
@@ -952,7 +952,8 @@ export function useRingUp() {
       showApiError({
         data: {
           error: {
-            message: "This resumed sale needs manager re-authorization. Resolve the flagged items first.",
+            message:
+              "This resumed sale needs manager re-authorization. Resolve the flagged items first.",
           },
         },
       });
@@ -1080,7 +1081,8 @@ export function useRingUp() {
       showApiError({
         data: {
           error: {
-            message: "This resumed sale needs manager re-authorization. Resolve the flagged items first.",
+            message:
+              "This resumed sale needs manager re-authorization. Resolve the flagged items first.",
           },
         },
       });
@@ -1234,7 +1236,9 @@ export function useRingUp() {
         .then((r) => {
           if (r?.ok) showSuccess("Receipt sent to printer");
         })
-        .catch(() => showApiError(new Error("Sale saved, but the receipt printer is unreachable.")));
+        .catch(() =>
+          showApiError(new Error("Sale saved, but the receipt printer is unreachable.")),
+        );
 
       dispatch(clearCart());
       // Completed sale — drop the crash-recovery mirror (Phase 1.3b).
@@ -1309,8 +1313,7 @@ export function useRingUp() {
 
   // ─── Suspend / Resume (Phase 1.3b) ─────────────────────────────────────────
 
-  const parkedByName =
-    `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || null;
+  const parkedByName = `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || null;
 
   // Resumed/recovered lines keep their price but their grant was stripped (B3);
   // these markers gate checkout until re-authorized.
@@ -1375,7 +1378,18 @@ export function useRingUp() {
       showSuccess("Sale parked");
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart, cartDiscount, cartDiscountMode, effectiveStoreId, user?.id, parkedByName, totalQty, grandTotalNum, parkedStore, mirrorParkedSale],
+    [
+      cart,
+      cartDiscount,
+      cartDiscountMode,
+      effectiveStoreId,
+      user?.id,
+      parkedByName,
+      totalQty,
+      grandTotalNum,
+      parkedStore,
+      mirrorParkedSale,
+    ],
   );
 
   const handleOpenPark = useCallback(() => {
@@ -1410,7 +1424,10 @@ export function useRingUp() {
     const stale = merged.filter((r) => new Date(r.parkedAt).getTime() < cutoff);
     for (const r of stale) {
       parkedStore.remove(r.id).catch(() => {});
-      if (r.origin === "remote") discardParkedSale({ id: r.id }).unwrap().catch(() => {});
+      if (r.origin === "remote")
+        discardParkedSale({ id: r.id })
+          .unwrap()
+          .catch(() => {});
     }
     setRecallRecords(merged.filter((r) => new Date(r.parkedAt).getTime() >= cutoff));
   }, [effectiveStoreId, parkedStore, triggerListRemote, discardParkedSale]);
@@ -1458,9 +1475,7 @@ export function useRingUp() {
       for (const line of restored.cartState.items) {
         const prod = products.find((p) => p.id === line.productId);
         if (!prod) continue;
-        const variant = line.variantId
-          ? prod.variants?.find((v) => v.id === line.variantId)
-          : null;
+        const variant = line.variantId ? prod.variants?.find((v) => v.id === line.variantId) : null;
         const st =
           variant && line.variantId
             ? getVariantStockState(variant, effectiveStoreId)
@@ -1494,13 +1509,25 @@ export function useRingUp() {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cart.items.length, doPark, claimParkedSale, dispatch, parkedStore, refreshRecallList, products, effectiveStoreId],
+    [
+      cart.items.length,
+      doPark,
+      claimParkedSale,
+      dispatch,
+      parkedStore,
+      refreshRecallList,
+      products,
+      effectiveStoreId,
+    ],
   );
 
   const handleDiscardParked = useCallback(
     async (record: ParkedSaleRecord) => {
       parkedStore.remove(record.id).catch(() => {});
-      if (record.origin === "remote") discardParkedSale({ id: record.id }).unwrap().catch(() => {});
+      if (record.origin === "remote")
+        discardParkedSale({ id: record.id })
+          .unwrap()
+          .catch(() => {});
       await refreshRecallList();
     },
     [parkedStore, discardParkedSale, refreshRecallList],
@@ -1536,8 +1563,7 @@ export function useRingUp() {
     setPendingGate({
       ctx,
       title: "Re-authorize discount",
-      description:
-        "This resumed sale's over-cap discount must be re-authorized before checkout.",
+      description: "This resumed sale's over-cap discount must be re-authorized before checkout.",
       onGranted: (grant, authorizerUserId) => {
         // setDiscountOverride clears the discountReauth marker.
         dispatch(setDiscountOverride({ grant, authorizerUserId, mode, value }));
